@@ -1,19 +1,8 @@
-// main.js - Main process with multi-turn conversation, system instruction, and tool declarations
-
-require('./dataInitializer'); // Ensure data folder/files exist
+// main.js - Main process entry point
+require('./dataInitializer');
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const { GoogleGenAI } = require('@google/genai');
-const { loadPrompt } = require('./src/util/promptLoader');
-const { loadContext } = require('./src/util/contextLoader');
-const { addCredits } = require('./src/util/credits');
-const { numTokensFromString } = require('./src/util/tokenCounter');
-const config = require('./config'); // Contains GEMINI_API_KEY, etc.
-
-// Global chat object and conversation history
-let chat = null;
-let conversationHistory = []; // Will store user/model messages
-let lastMessageTime = null;
+const chatManager = require('./src/models/chatManager');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -35,90 +24,62 @@ app.whenReady().then(() => {
   });
 });
 
-// Initialize the Gemini chat with system instruction & tools.
-// We now pass your life coach prompt and context via the config.systemInstruction,
-// and we also define a sample tool (e.g. create_event). You can add more tools similarly.
-function initializeChat() {
-  const systemPrompt = loadPrompt();     // e.g. "You are a stern life coach..."
-  const contextText = loadContext();       // Additional user context
+// Initialize with default model
+chatManager.initialize("gemini-2.0-flash");
 
-  // Example: define a tool for creating events.
-  const createEventFn = {
-    name: 'create_event',
-    description: 'Creates a new event in Google Calendar with a specified date and title.',
-    parameters: {
-      type: 'object',
-      properties: {
-        date: { type: 'string', description: 'Date of the event in YYYY-MM-DD format.' },
-        title: { type: 'string', description: 'Title or description of the event.' }
-      },
-      required: ['date', 'title']
-    }
-  };
-  // (Additional tool declarations like check_events, start_timer, and make_note can be added here.)
-
-  const ai = new GoogleGenAI({ apiKey: config.GEMINI_API_KEY });
-  // Start with an empty conversation history; system instructions are passed via config.
-  conversationHistory = [];
-  chat = ai.chats.create({
-    model: 'gemini-2.0-flash',
-    history: conversationHistory,
-    config: {
-      systemInstruction: systemPrompt + "\n" + contextText,
-      tools: [{
-        functionDeclarations: [createEventFn /*, checkEventsFn, startTimerFn, makeNoteFn */]
-      }],
-      toolConfig: {
-        functionCallingConfig: {
-          mode: 'auto'  // or 'any'/'none' based on your preference
+ipcMain.on('chatMessage', async (event, data) => {
+  const { message, model } = data;
+  if (model && model !== chatManager.currentModel()) {
+    chatManager.initialize(model);
+  }
+  try {
+    const stream = await chatManager.sendMessage(message);
+    let responseBuffer = "";
+    for await (const chunk of stream) {
+      if (chatManager.currentModel().startsWith("gpt")) {
+        // For GPT, we check if the streamed delta includes a function call.
+        if (chunk.choices && chunk.choices[0].delta) {
+          const delta = chunk.choices[0].delta;
+          if (delta.function_call) {
+            console.log("GPT function call detected:", delta.function_call);
+            const actionsManager = require('./src/actions/ActionsManager');
+            try {
+              const result = await actionsManager.execute(
+                delta.function_call.name,
+                JSON.parse(delta.function_call.arguments || "{}")
+              );
+              event.sender.send('functionCallResponse', { text: JSON.stringify(result) });
+            } catch (err) {
+              event.sender.send('functionCallResponse', { text: "Error executing tool: " + err.message });
+            }
+            continue;
+          }
+          if (delta.content) {
+            responseBuffer += delta.content;
+            event.sender.send('streamPartialResponse', { text: delta.content });
+          }
+        }
+      } else {
+        // For Gemini models
+        if (chunk.functionCall) {
+          console.log("Gemini function call detected:", chunk.functionCall);
+          const actionsManager = require('./src/actions/ActionsManager');
+          try {
+            const result = await actionsManager.execute(chunk.functionCall.name, chunk.functionCall.args);
+            event.sender.send('functionCallResponse', { text: JSON.stringify(result) });
+          } catch (err) {
+            event.sender.send('functionCallResponse', { text: "Error executing tool: " + err.message });
+          }
+          continue;
+        }
+        if (chunk.text) {
+          responseBuffer += chunk.text;
+          event.sender.send('streamPartialResponse', { text: chunk.text });
         }
       }
     }
-  });
-}
-
-initializeChat();
-
-// Multi-turn chat handling
-ipcMain.on('chatMessage', async (event, data) => {
-  const { message } = data;
-
-  // Calculate time metadata
-  const now = new Date();
-  const timeDiff = lastMessageTime ? Math.round((now - lastMessageTime) / 1000) : 0;
-  lastMessageTime = now;
-  const metadata = `Date: ${now.toLocaleDateString()} | Time: ${now.toLocaleTimeString()} | Since last msg: ${timeDiff}s\n`;
-  const fullMessage = metadata + message;
-
-  // Append the user message to the conversation history
-  conversationHistory.push({
-    role: 'user',
-    parts: [{ text: fullMessage }]
-  });
-
-  // Calculate token usage and update credits
-  const conversationText = conversationHistory
-    .map(msg => msg.parts.map(part => part.text).join('\n'))
-    .join('\n');
-  const tokens = numTokensFromString(conversationText);
-  addCredits(tokens);
-
-  // Stream the model's response
-  try {
-    const stream = await chat.sendMessageStream({ message: fullMessage });
-    let responseBuffer = '';
-    // Send partial chunks using a dedicated event
-    for await (const chunk of stream) {
-      responseBuffer += chunk.text;
-      event.sender.send('streamPartialResponse', { text: chunk.text });
-    }
-    // When finished, send a final event with the complete response
     event.sender.send('streamFinalResponse', { text: responseBuffer });
-    // Append the model response to the conversation history
-    conversationHistory.push({
-      role: 'model',
-      parts: [{ text: responseBuffer }]
-    });
+    chatManager.appendModelResponse(responseBuffer);
   } catch (error) {
     event.sender.send('streamFinalResponse', { text: "Error: " + error.message });
   }
