@@ -1,4 +1,4 @@
-// MakeNote.js - Action to append a note while ensuring the token limit is not exceeded
+// MakeNote.js - Updated to use "note" parameter and trim its value
 const ActionBase = require('./ActionBase');
 const fs = require('fs');
 const path = require('path');
@@ -7,23 +7,20 @@ const { numTokensFromString } = require('../util/tokenCounter');
 const NOTES_FILE = path.join(__dirname, '../../data/notes.txt');
 const MAX_TOKENS = 100000;
 
-// Initialize notes file if missing
 if (!fs.existsSync(NOTES_FILE)) fs.writeFileSync(NOTES_FILE, '');
 
 class MakeNote extends ActionBase {
-  /**
-   * Appends a note and archives older notes if token count exceeds limit.
-   * @param {Object} params - { noteText }
-   */
   async execute(params) {
-    const { noteText } = params;
+    // Extract and trim the note value
+    const note = params.note ? params.note.trim() : "";
+    console.log("MakeNote received note:", note);
     let existingNotes = fs.readFileSync(NOTES_FILE, 'utf-8');
-    const totalTokens = numTokensFromString(existingNotes + noteText);
+    const totalTokens = numTokensFromString(existingNotes + note);
     if (totalTokens > MAX_TOKENS) {
       archiveNotes(existingNotes);
       existingNotes = '';
     }
-    fs.appendFileSync(NOTES_FILE, `\n${noteText}`);
+    fs.appendFileSync(NOTES_FILE, `\n${note}`);
     return { status: 'Note added' };
   }
 }

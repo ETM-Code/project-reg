@@ -1,4 +1,5 @@
-// main.js - Main process entry point
+// main.js - Main process entry point with unified chat manager, GPT and Gemini streaming with integrated tool calling
+
 require('./dataInitializer');
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
@@ -11,8 +12,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
-      contextIsolation: true
-    }
+      contextIsolation: true,
+    },
   });
   win.loadFile(path.join(__dirname, 'src/renderer/index.html'));
 }
@@ -25,7 +26,7 @@ app.whenReady().then(() => {
 });
 
 // Initialize with default model
-chatManager.initialize("gemini-2.0-flash");
+chatManager.initialize("gpt-4o-mini");
 
 ipcMain.on('chatMessage', async (event, data) => {
   const { message, model } = data;
@@ -35,24 +36,31 @@ ipcMain.on('chatMessage', async (event, data) => {
   try {
     const stream = await chatManager.sendMessage(message);
     let responseBuffer = "";
+    let currentFunctionCall = null; // For accumulating GPT function call deltas
+    let toolPlaceholderInserted = false;
+
     for await (const chunk of stream) {
       if (chatManager.currentModel().startsWith("gpt")) {
-        // For GPT, we check if the streamed delta includes a function call.
+        // GPT streaming: chunks come in choices[].delta
         if (chunk.choices && chunk.choices[0].delta) {
           const delta = chunk.choices[0].delta;
           if (delta.function_call) {
-            console.log("GPT function call detected:", delta.function_call);
-            const actionsManager = require('./src/actions/ActionsManager');
-            try {
-              const result = await actionsManager.execute(
-                delta.function_call.name,
-                JSON.parse(delta.function_call.arguments || "{}")
-              );
-              event.sender.send('functionCallResponse', { text: JSON.stringify(result) });
-            } catch (err) {
-              event.sender.send('functionCallResponse', { text: "Error executing tool: " + err.message });
+            if (!currentFunctionCall) {
+              currentFunctionCall = {
+                name: delta.function_call.name || "",
+                arguments: ""
+              };
+              console.log("GPT function call detected:", currentFunctionCall);
             }
-            continue;
+            if (delta.function_call.arguments) {
+              currentFunctionCall.arguments += delta.function_call.arguments;
+              console.log("GPT function call delta:", delta.function_call.arguments);
+            }
+            if (!toolPlaceholderInserted) {
+              responseBuffer += "[TOOL_RESULT]";
+              toolPlaceholderInserted = true;
+            }
+            continue; // Skip processing text when accumulating function call deltas.
           }
           if (delta.content) {
             responseBuffer += delta.content;
@@ -60,16 +68,17 @@ ipcMain.on('chatMessage', async (event, data) => {
           }
         }
       } else {
-        // For Gemini models
+        // Gemini streaming
+        // Check if the chunk has an explicit functionCall property…
         if (chunk.functionCall) {
           console.log("Gemini function call detected:", chunk.functionCall);
-          const actionsManager = require('./src/actions/ActionsManager');
-          try {
-            const result = await actionsManager.execute(chunk.functionCall.name, chunk.functionCall.args);
-            event.sender.send('functionCallResponse', { text: JSON.stringify(result) });
-          } catch (err) {
-            event.sender.send('functionCallResponse', { text: "Error executing tool: " + err.message });
-          }
+          currentFunctionCall = chunk.functionCall;
+          continue;
+        }
+        // ...or if the chunk has nonTextParts containing a function call.
+        if (chunk.nonTextParts && chunk.nonTextParts.functionCall) {
+          console.log("Gemini nonTextParts function call detected:", chunk.nonTextParts.functionCall);
+          currentFunctionCall = chunk.nonTextParts.functionCall;
           continue;
         }
         if (chunk.text) {
@@ -78,6 +87,30 @@ ipcMain.on('chatMessage', async (event, data) => {
         }
       }
     }
+
+    // Process any accumulated function call (applies to both GPT and Gemini)
+    if (currentFunctionCall) {
+      try {
+        const actionsManager = require('./src/actions/ActionsManager');
+        // Convert snake_case to camelCase (e.g., "make_note" -> "makeNote")
+        const toolName = currentFunctionCall.name.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+        let parsedArgs;
+        if (chatManager.currentModel().startsWith("gpt")) {
+          parsedArgs = JSON.parse(currentFunctionCall.arguments);
+        } else {
+          parsedArgs = currentFunctionCall.args;
+        }
+        const result = await actionsManager.execute(toolName, parsedArgs);
+        console.log("Tool executed:", result);
+        // Replace the placeholder with the tool result if present
+        responseBuffer = responseBuffer.replace("[TOOL_RESULT]", JSON.stringify(result));
+      } catch (err) {
+        console.error("Error executing tool:", err);
+        responseBuffer = responseBuffer.replace("[TOOL_RESULT]", "[Error executing tool]");
+      }
+      currentFunctionCall = null;
+    }
+    // Send final response and update conversation history.
     event.sender.send('streamFinalResponse', { text: responseBuffer });
     chatManager.appendModelResponse(responseBuffer);
   } catch (error) {
