@@ -4,6 +4,24 @@ require('./dataInitializer');
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const chatManager = require('./src/models/chatManager');
+const dotenv = require('dotenv');
+
+// Determine the correct path to the .env file
+const envPath = app.isPackaged
+  ? path.join(process.resourcesPath, '.env') // Path when packaged
+  : path.join(__dirname, '.env');             // Path in development
+
+// Load the .env file
+const result = dotenv.config({ path: envPath });
+
+if (result.error) {
+  console.error("Error loading .env file:", result.error);
+  // Optionally, handle the error more gracefully, e.g., show a dialog
+  // For now, we'll just log it. The OpenAI client will throw its own error later if the key is missing.
+} else {
+  console.log(".env file loaded successfully from:", envPath);
+  // console.log("Loaded environment variables:", result.parsed); // Optional: Log loaded vars for debugging
+}
 
 function createWindow() {
   const win = new BrowserWindow({
