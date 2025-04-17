@@ -4,6 +4,7 @@ require('./dataInitializer');
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const chatManager = require('./src/models/chatManager');
+const { setupIpcHandlers } = require('./src/main/ipc'); // Import the setup function
 const dotenv = require('dotenv');
 
 // Determine the correct path to the .env file
@@ -38,6 +39,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  setupIpcHandlers(); // Call the setup function here
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -130,7 +132,16 @@ ipcMain.on('chatMessage', async (event, data) => {
     }
     // Send final response and update conversation history.
     event.sender.send('streamFinalResponse', { text: responseBuffer });
-    chatManager.appendModelResponse(responseBuffer);
+    const shouldGenerateTitle = await chatManager.appendModelResponse(responseBuffer); // Check return value
+
+    // Trigger title generation if needed
+    if (shouldGenerateTitle) {
+      const generatedTitle = await chatManager.triggerTitleGeneration();
+      if (generatedTitle) {
+        // Notify renderer about the updated title
+        event.sender.send('chat-title-updated', { chatId: chatManager.getCurrentChatId(), newTitle: generatedTitle });
+      }
+    }
   } catch (error) {
     event.sender.send('streamFinalResponse', { text: "Error: " + error.message });
   }

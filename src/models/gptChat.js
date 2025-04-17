@@ -13,6 +13,8 @@ function initialize(modelName) {
     apiKey = config.GPT4O_API_KEY;
   } else if (modelName === "gpt-4o-mini") {
     apiKey = config.GPT4O_MINI_API_KEY;
+  } else if (modelName === "gpt-4.1-nano") { // Add nano model
+    apiKey = config.GPT41_NANO_API_KEY; // Assuming this key exists in config
   } else {
     apiKey = config.GPT4O_API_KEY;
   }
@@ -62,4 +64,30 @@ async function sendMessageStream(conversationHistory, message, toolDeclarations,
   }
 }
 
-module.exports = { initialize, transformHistoryForGPT, sendMessageStream };
+module.exports = { initialize, transformHistoryForGPT, sendMessageStream, generateChatTitle }; // Export new function
+
+async function generateChatTitle(firstUserMessage, firstModelResponse) {
+  if (!openaiClient) {
+    // Ensure client is initialized, potentially with a default or specific key for nano
+    initialize("gpt-4.1-nano");
+  }
+  const titlePrompt = `Based on the following first user message and first model response, generate a very concise title (5 words maximum) for this chat session. Only return the title text, nothing else.
+
+User: ${firstUserMessage}
+Model: ${firstModelResponse}
+
+Title:`;
+
+  try {
+    const response = await openaiClient.chat.completions.create({
+      model: "gpt-4.1-nano", // Use the specific nano model
+      messages: [{ role: "user", content: titlePrompt }],
+      temperature: 0.5, // Lower temperature for more focused title generation
+      max_tokens: 20, // Limit token usage for title
+    });
+    return response.choices[0].message.content.trim();
+  } catch (error) {
+    console.error("Error generating chat title:", error);
+    return null; // Return null on error
+  }
+}

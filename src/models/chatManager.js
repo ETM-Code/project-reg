@@ -2,6 +2,8 @@
 const geminiChatModel = require('./geminiChat');
 const gptChatModel = require('./gptChat');
 const { loadPrompt } = require('../util/promptLoader');  // (for potential use)
+const { generateChatTitle } = require('./gptChat'); // Import title generation
+const chatStorage = require('../services/chatStorage'); // Import chatStorage
 const toolDeclarations = [
   {
     name: 'create_event',
@@ -78,6 +80,7 @@ async function sendMessage(message) {
   const metadata = `Date: ${now.toLocaleDateString()} | Time: ${now.toLocaleTimeString()} | Since last msg: ${timeDiff}s\n`;
   const fullMessage = metadata + message;
   conversationHistory.push({
+    id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, // Add unique ID
     role: "user",
     parts: [{ text: fullMessage }]
   });
@@ -91,11 +94,20 @@ async function sendMessage(message) {
   }
 }
 
-function appendModelResponse(responseText) {
+async function appendModelResponse(responseText) { // Make async
   conversationHistory.push({
+    id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, // Add unique ID
     role: "model",
     parts: [{ text: responseText }]
   });
+  await chatStorage.saveChat(currentChatId, conversationHistory, currentModel); // Save history
+
+  // Check if this is the first model response to trigger title generation
+  if (conversationHistory.length === 2) {
+    // Return a flag or the title itself to indicate generation should be attempted
+    return true; // Indicate title generation should be triggered
+  }
+  return false; // Indicate no title generation needed this time
 }
 
 function currentModelFunc() {
@@ -106,18 +118,90 @@ function getConversationHistory() {
   return conversationHistory;
 }
 
-function startNewChat() {
+// Helper function to check and delete empty chats
+async function checkAndDeleteEmptyChat(chatId, history) {
+  if (chatId && history && history.length <= 1) {
+    console.log(`[chatManager] Chat ${chatId} has ${history.length} messages. Attempting deletion.`);
+    const deleted = await chatStorage.deleteChat(chatId);
+    if (deleted) {
+      console.log(`[chatManager] Successfully deleted empty chat ${chatId}.`);
+      // TODO: Optionally notify renderer to remove from UI list immediately
+    } else {
+      console.error(`[chatManager] Failed to delete empty chat ${chatId}.`);
+    }
+  }
+}
+
+async function startNewChat() {
+  // Check the *previous* chat before starting a new one
+  const previousChatId = currentChatId;
+  const previousHistory = [...conversationHistory]; // Make a copy
+  await checkAndDeleteEmptyChat(previousChatId, previousHistory);
+
+  // Proceed with starting the new chat
   conversationHistory = [];
   currentChatId = Date.now().toString();
+  // Re-initialize the model for the new chat context (important if model instances hold state)
+  if (currentModel) {
+      initialize(currentModel);
+  }
   return currentChatId;
 }
 
-function editMessage(messageIndex, newContent) {
-  if (messageIndex >= 0 && messageIndex < conversationHistory.length) {
+// Modify editMessage to use messageId
+async function editMessage(messageId, newContent) {
+  const messageIndex = conversationHistory.findIndex(msg => msg.id === messageId);
+  console.log(`[chatManager.editMessage] Received ID: ${messageId}. Found index: ${messageIndex}. History length: ${conversationHistory.length}`); // Add log
+
+  if (messageIndex !== -1) { // Check if message was found
+    // 1. Backup the current version before editing
+    await chatStorage.backupChatVersion(currentChatId);
+
+    // 2. Update the content of the target message
+    // Optional: Add check to ensure it's a user message being edited
+    if (conversationHistory[messageIndex].role !== 'user') {
+        console.error(`[chatManager.editMessage] Attempted to edit non-user message ID: ${messageId}`);
+        return null; // Prevent editing non-user messages
+    }
     conversationHistory[messageIndex].parts[0].text = newContent;
-    // Truncate history after edited message to maintain consistency
+
+    // 3. Truncate history after the edited message
     conversationHistory = conversationHistory.slice(0, messageIndex + 1);
+
+    // 4. Save the truncated history (this becomes the new "current" state)
+    await chatStorage.saveChat(currentChatId, conversationHistory, currentModel); // Save truncated history
+
+    // 5. Return the edited message content for resubmission
+    return newContent;
   }
+  console.error(`[chatManager.editMessage] Message ID ${messageId} not found in history.`); // Log failure
+  return null; // Indicate failure if ID not found
+}
+
+// New function to handle the title generation logic
+async function triggerTitleGeneration() {
+  if (conversationHistory.length < 2) return null; // Need at least two messages
+
+  // Avoid regenerating if already done (check storage first)
+  const chatData = await chatStorage.loadChat(currentChatId);
+  if (chatData && chatData.titleGenerated) {
+    console.log(`Title already generated for chat ${currentChatId}`);
+    return null;
+  }
+
+  const firstUserMsg = conversationHistory[0]?.parts[0]?.text;
+  const firstModelMsg = conversationHistory[1]?.parts[0]?.text;
+
+  if (!firstUserMsg || !firstModelMsg) return null;
+
+  const generatedTitle = await generateChatTitle(firstUserMsg, firstModelMsg);
+
+  if (generatedTitle) {
+    console.log(`Generated title for chat ${currentChatId}: ${generatedTitle}`);
+    await chatStorage.updateChatTitle(currentChatId, generatedTitle, conversationHistory, currentModel);
+    return generatedTitle; // Return the title if successful
+  }
+  return null; // Return null if generation failed
 }
 
 function getCurrentChatId() {
@@ -125,16 +209,31 @@ function getCurrentChatId() {
 }
 
 async function loadChat(chatId) {
+  // Check the *previous* chat before loading a new one
+  const previousChatId = currentChatId;
+  const previousHistory = [...conversationHistory]; // Make a copy
+  // Don't delete if we are trying to load the *same* chat again
+  if (previousChatId !== chatId) {
+      await checkAndDeleteEmptyChat(previousChatId, previousHistory);
+  }
+
+  // Proceed with loading the chat
   const loaded = await chatStorage.loadChat(chatId);
   if (loaded) {
     conversationHistory = loaded.history;
     currentModel = loaded.model;
     currentChatId = chatId;
-    initialize(currentModel);
+    initialize(currentModel); // Re-initialize model with loaded history/context
+    return true; // Indicate success
+  } else {
+    console.error(`[chatManager] Failed to load chat ${chatId}.`);
+    // Handle failure: maybe load default state or notify user?
+    // For now, just return false.
+    return false; // Indicate failure
   }
 }
 
-module.exports = { 
+module.exports = {
   initialize, 
   sendMessage, 
   appendModelResponse, 
@@ -144,5 +243,6 @@ module.exports = {
   editMessage,
   getCurrentChatId,
   loadChat,
-  getConversationHistory 
+  getConversationHistory,
+  triggerTitleGeneration // Export the new function
 };
