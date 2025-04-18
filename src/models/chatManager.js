@@ -41,7 +41,7 @@ const toolDeclarations = [
   },
   {
     name: 'make_note',
-    description: 'Appends a note to the user notes log, archiving older notes if token limits are exceeded.',
+    description: 'Appends a note to the user notes log. This should be used whenever the user says something that even MIGHT be useful to remember later',
     parameters: {
       type: 'object',
       properties: {
@@ -89,8 +89,9 @@ async function sendMessage(message) {
     const stream = await gptChatModel.sendMessageStream(conversationHistory, fullMessage, toolDeclarations, currentModel);
     return stream;
   } else {
-    const stream = await geminiChatModel.sendMessageStream(geminiChat, fullMessage);
-    return stream;
+    // geminiChatModel.sendMessageStream now returns { stream, response }
+    const result = await geminiChatModel.sendMessageStream(geminiChat, fullMessage);
+    return result; // Return the full object
   }
 }
 
@@ -123,20 +124,24 @@ async function checkAndDeleteEmptyChat(chatId, history) {
   if (chatId && history && history.length <= 1) {
     console.log(`[chatManager] Chat ${chatId} has ${history.length} messages. Attempting deletion.`);
     const deleted = await chatStorage.deleteChat(chatId);
-    if (deleted) {
+    if (deleted) { // If deletion was successful
       console.log(`[chatManager] Successfully deleted empty chat ${chatId}.`);
-      // TODO: Optionally notify renderer to remove from UI list immediately
+      // Return the chatId so the caller (ipc handler) can notify the renderer
+      return chatId;
     } else {
       console.error(`[chatManager] Failed to delete empty chat ${chatId}.`);
     }
   }
+  return null; // Return null if no deletion occurred or failed
 }
 
 async function startNewChat() {
   // Check the *previous* chat before starting a new one
   const previousChatId = currentChatId;
   const previousHistory = [...conversationHistory]; // Make a copy
-  await checkAndDeleteEmptyChat(previousChatId, previousHistory);
+  // Check and delete the previous chat if it was empty
+  const deletedChatId = await checkAndDeleteEmptyChat(previousChatId, previousHistory);
+  // Note: The actual notification needs to happen in the IPC handler
 
   // Proceed with starting the new chat
   conversationHistory = [];
@@ -145,7 +150,7 @@ async function startNewChat() {
   if (currentModel) {
       initialize(currentModel);
   }
-  return currentChatId;
+  return { newChatId: currentChatId, deletedChatId: deletedChatId }; // Return both IDs
 }
 
 // Modify editMessage to use messageId
@@ -213,8 +218,9 @@ async function loadChat(chatId) {
   const previousChatId = currentChatId;
   const previousHistory = [...conversationHistory]; // Make a copy
   // Don't delete if we are trying to load the *same* chat again
-  if (previousChatId !== chatId) {
-      await checkAndDeleteEmptyChat(previousChatId, previousHistory);
+  let deletedChatId = null;
+  if (previousChatId && previousChatId !== chatId) { // Ensure previousChatId exists
+      deletedChatId = await checkAndDeleteEmptyChat(previousChatId, previousHistory);
   }
 
   // Proceed with loading the chat
@@ -224,13 +230,13 @@ async function loadChat(chatId) {
     currentModel = loaded.model;
     currentChatId = chatId;
     initialize(currentModel); // Re-initialize model with loaded history/context
-    return true; // Indicate success
+    return { success: true, history: conversationHistory, deletedChatId: deletedChatId }; // Return success, history, and potentially deleted ID
   } else {
     console.error(`[chatManager] Failed to load chat ${chatId}.`);
     // Handle failure: maybe load default state or notify user?
     // For now, just return false.
-    return false; // Indicate failure
-  }
+    return { success: false, deletedChatId: deletedChatId }; // Indicate failure, but still return potentially deleted ID
+   }
 }
 
 module.exports = {

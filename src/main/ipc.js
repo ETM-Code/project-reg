@@ -2,20 +2,38 @@ const { ipcMain } = require('electron');
 const chatStorage = require('../services/chatStorage');
 const chatManager = require('../models/chatManager');
 
-function setupIpcHandlers() {
+function setupIpcHandlers(mainWindow) { // Accept mainWindow
     ipcMain.handle('list-chats', async () => {
         return await chatStorage.listChats();
     });
 
-    ipcMain.handle('start-new-chat', async () => { 
-        const chatId = chatManager.startNewChat();
-        await chatStorage.saveChat(chatId, [], chatManager.currentModel());
-        return chatId;
+    ipcMain.handle('start-new-chat', async () => {
+        const { newChatId, deletedChatId } = await chatManager.startNewChat(); // Get both IDs
+        // Save the new chat (even if empty initially)
+        await chatStorage.saveChat(newChatId, [], chatManager.currentModel());
+        // Notify renderer if a previous chat was deleted
+        if (deletedChatId && mainWindow) {
+            console.log(`[IPC] Notifying renderer of deleted chat: ${deletedChatId}`);
+            mainWindow.webContents.send('chat-deleted', deletedChatId);
+        }
+        return newChatId; // Return the ID of the newly started chat
     });
 
     ipcMain.handle('load-chat', async (_, chatId) => {
-        await chatManager.loadChat(chatId);
-        return chatManager.getConversationHistory();
+        const { success, history, deletedChatId } = await chatManager.loadChat(chatId); // Get result object
+        // Notify renderer if a previous chat was deleted during the load process
+        if (deletedChatId && mainWindow) {
+             console.log(`[IPC] Notifying renderer of deleted chat: ${deletedChatId}`);
+             mainWindow.webContents.send('chat-deleted', deletedChatId);
+        }
+        if (success) {
+            return history; // Return the history of the loaded chat on success
+        } else {
+            // Handle load failure - maybe return null or throw an error?
+            // Returning null for now, renderer should handle this.
+            console.error(`[IPC] Failed to load chat ${chatId} in chatManager.`);
+            return null;
+        }
     });
 
     // Handler for editing a message

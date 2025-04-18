@@ -6,5 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMessage: (channel, func) => ipcRenderer.on(channel, (event, ...args) => func(...args)),
   invoke: (channel, data) => ipcRenderer.invoke(channel, data),
   // Add listener for title updates (using onMessage structure)
-  onTitleUpdate: (func) => ipcRenderer.on('chat-title-updated', (event, ...args) => func(...args))
+  onTitleUpdate: (func) => ipcRenderer.on('chat-title-updated', (event, ...args) => func(...args)),
+  // Add listener for chat deletion notifications
+  onChatDeleted: (func) => ipcRenderer.on('chat-deleted', (event, ...args) => func(...args))
 });

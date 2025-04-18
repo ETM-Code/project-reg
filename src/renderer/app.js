@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
   const userInput = document.getElementById('userInput');
   const sendBtn = document.getElementById('sendBtn');
   const modelSelector = document.getElementById('modelSelector'); // New selector for models
+  const tokenCounterDisplay = document.getElementById('tokenCounterDisplay'); // Get token counter element
 
   // Initial chat loading/starting is now handled by chatHistory.js
 
@@ -14,6 +15,20 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
   let isEditing = false;
   let editingIndex = null;
   let editingOriginalText = null;
+
+  // --- Token Counter Logic ---
+  function updateTokenDisplay(usageData) {
+    // Display total tokens
+    if (tokenCounterDisplay && usageData && typeof usageData.total === 'number') {
+      const total = usageData.total.toLocaleString();
+      tokenCounterDisplay.textContent = `Today's Tokens: ${total}`;
+    } else {
+      tokenCounterDisplay.textContent = "Today's Tokens: N/A";
+      console.warn("Received invalid token usage data or element not found:", usageData);
+    }
+  }
+
+  // --- End Token Counter Logic ---
 
   // Expose a function to reset the counter when a chat is loaded
   window.resetAppMessageCounter = (historyLength) => {
@@ -251,5 +266,16 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
     // Assign index based on counter *after* response is final
     appendMessage('bot', "Tool executed: " + data.text, messageIndexCounter); // Assign index here?
      messageIndexCounter++; // Increment after model response (including tool calls)
-  });
+});
+
+// --- Initialize Token Counter ---
+// Request initial token count on load
+try {
+  const initialUsage = await window.electronAPI.invoke('get-initial-token-usage');
+  updateTokenDisplay(initialUsage);
+} catch (error) {
+  console.error("Error fetching initial token usage:", error);
+  updateTokenDisplay(null); // Show N/A on error
+}
+window.electronAPI.onMessage('token-usage-updated', updateTokenDisplay); // Listen for updates
 });

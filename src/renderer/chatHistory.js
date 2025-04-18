@@ -128,17 +128,42 @@ document.addEventListener('DOMContentLoaded', () => {
    } else {
      console.warn(`Could not find chat item with ID ${chatId} to update title.`);
    }
- }
-
-
-  // --- Event Listeners ---
-  newChatBtn.addEventListener('click', startNewChat);
+  }
+ 
+  // Function to remove a chat item from the list
+  function removeChatItem(chatId) {
+    const chatItem = chatListDiv.querySelector(`div[data-chat-id="${chatId}"]`);
+    if (chatItem) {
+      chatItem.parentNode.removeChild(chatItem);
+      console.log(`Removed deleted chat ${chatId} from list.`);
+      // Check if the list is now empty
+      if (chatListDiv.children.length === 0) {
+         chatListDiv.innerHTML = '<p class="text-xs text-gray-500">No saved chats.</p>';
+      }
+      // If the deleted chat was the currently active one, potentially clear the main window
+      // or load another chat (e.g., the first one in the list or start a new one).
+      // For now, we'll just remove it from the list. Handling the active chat state
+      // might require more complex logic depending on desired UX.
+      if (currentChatId === chatId) {
+          currentChatId = null; // Clear the currentChatId tracker
+          // Optionally clear the main chat window here if desired
+          // clearChatWindow();
+      }
+    } else {
+      console.warn(`Could not find chat item with ID ${chatId} to remove.`);
+    }
+  }
+ 
+ 
+   // --- Event Listeners ---
+   newChatBtn.addEventListener('click', startNewChat);
 
   // --- Initial Load ---
   loadChatList();
 
   // Listen for title updates from the main process
   window.electronAPI.onTitleUpdate(updateChatItemTitle);
+  window.electronAPI.onChatDeleted(removeChatItem); // Listen for chat deletion events
 
   // TODO: Consider how to get the initial currentChatId from app.js or backend
   // For now, we assume no chat is loaded initially until one is clicked or created.

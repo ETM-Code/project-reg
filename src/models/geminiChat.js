@@ -29,7 +29,10 @@ function initialize(conversationHistory, toolDeclarations, modelName = "gemini-2
 }
 
 async function sendMessageStream(chat, message) {
-  return chat.sendMessageStream({ message });
+  // sendMessageStream returns an object { stream, response }
+  // stream is the async iterator, response is a promise for the aggregated result
+  const result = await chat.sendMessageStream({ message });
+  return result; // Return the whole object { stream, response }
 }
 
 module.exports = { initialize, sendMessageStream };

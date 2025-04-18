@@ -10,8 +10,13 @@
 </head>
 <body class="bg-background text-foreground">
   <div class="flex flex-col h-screen">
-    <div class="bg-primary text-white p-4 flex-shrink-0"> <!-- Header -->
+    <!-- Header: Added flex justify-between items-center -->
+    <div class="bg-primary text-white p-4 flex-shrink-0 flex justify-between items-center">
       <h1 class="text-2xl font-bold">Project Reg</h1>
+      <!-- Token Counter Display -->
+      <div id="tokenCounterDisplay" class="text-sm">
+        Today's Tokens: Loading...
+      </div>
     </div>
 
     <div class="flex flex-1 overflow-hidden"> <!-- Main content area (changed to flex row) -->

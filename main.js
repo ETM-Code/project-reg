@@ -5,6 +5,8 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const chatManager = require('./src/models/chatManager');
 const { setupIpcHandlers } = require('./src/main/ipc'); // Import the setup function
+const { countTokens, cleanupEncoders } = require('./src/util/tiktokenCounter'); // Import tiktoken counter
+const dailyTokenTracker = require('./src/services/dailyTokenTracker'); // Import the token tracker
 const dotenv = require('dotenv');
 
 // Determine the correct path to the .env file
@@ -24,9 +26,13 @@ if (result.error) {
   // console.log("Loaded environment variables:", result.parsed); // Optional: Log loaded vars for debugging
 }
 
+// Declare mainWindow at the module level
+let mainWindow;
+
 function createWindow() {
-  const win = new BrowserWindow({
-    width: 1200,
+  // Assign the newly created window instance to the module-level variable
+  mainWindow = new BrowserWindow({
+    width: 1200, // Added width back
     height: 800,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -34,12 +40,13 @@ function createWindow() {
       contextIsolation: true,
     },
   });
-  win.loadFile(path.join(__dirname, 'src/renderer/index.html'));
+  mainWindow.loadFile(path.join(__dirname, 'src/renderer/index.html'));
 }
 
 app.whenReady().then(() => {
   createWindow();
-  setupIpcHandlers(); // Call the setup function here
+  global.mainWindow = mainWindow; // Assign the module-level variable to global for other modules
+  setupIpcHandlers(mainWindow); // Pass mainWindow to the setup function
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -54,16 +61,26 @@ ipcMain.on('chatMessage', async (event, data) => {
     chatManager.initialize(model);
   }
   try {
-    const stream = await chatManager.sendMessage(message);
+    // --- Prepare for Token Counting (Approximate GPT Input) ---
+    const currentHistory = chatManager.getConversationHistory(); // Get history *before* adding new user message
+    const historyTextForInputCount = JSON.stringify(currentHistory); // Simple string representation for counting
+    // --- End Preparation ---
+
+    // sendMessage returns stream for GPT, { stream, response } for Gemini
+    const chatResult = await chatManager.sendMessage(message);
     let responseBuffer = "";
     let currentFunctionCall = null; // For accumulating GPT function call deltas
     let toolPlaceholderInserted = false;
+    let lastGptChunk = null; // To store the last chunk for GPT usage data
+    let geminiResponsePromise = null; // To store the Gemini response promise
+    let streamIterator = null; // To store the stream iterator
 
-    for await (const chunk of stream) {
-      if (chatManager.currentModel().startsWith("gpt")) {
+    if (chatManager.currentModel().startsWith("gpt")) {
+      streamIterator = chatResult; // GPT returns the stream directly
+      for await (const chunk of streamIterator) {
         // GPT streaming: chunks come in choices[].delta
         if (chunk.choices && chunk.choices[0].delta) {
-          const delta = chunk.choices[0].delta;
+          const delta = chunk.choices[0].delta; // Corrected: Access delta correctly
           if (delta.function_call) {
             if (!currentFunctionCall) {
               currentFunctionCall = {
@@ -87,9 +104,13 @@ ipcMain.on('chatMessage', async (event, data) => {
             event.sender.send('streamPartialResponse', { text: delta.content });
           }
         }
-      } else {
+        lastGptChunk = chunk; // Store the last chunk
+      }
+    } else {
+      streamIterator = chatResult.stream; // Gemini returns { stream, response }
+      geminiResponsePromise = chatResult.response; // Store the promise
+      for await (const chunk of streamIterator) {
         // Gemini streaming
-        // Check if the chunk has an explicit functionCall property…
         if (chunk.functionCall) {
           console.log("Gemini function call detected:", chunk.functionCall);
           currentFunctionCall = chunk.functionCall;
@@ -108,7 +129,6 @@ ipcMain.on('chatMessage', async (event, data) => {
       }
     }
 
-    // Process any accumulated function call (applies to both GPT and Gemini)
     if (currentFunctionCall) {
       try {
         const actionsManager = require('./src/actions/ActionsManager');
@@ -130,8 +150,44 @@ ipcMain.on('chatMessage', async (event, data) => {
       }
       currentFunctionCall = null;
     }
-    // Send final response and update conversation history.
+
+    // Send final response text
     event.sender.send('streamFinalResponse', { text: responseBuffer });
+
+    // --- Token Counting Logic ---
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    if (chatManager.currentModel().startsWith("gpt")) {
+      // Use tiktoken for GPT
+      try {
+        // Approximate input: count original message + stringified history before message
+        inputTokens = countTokens(model, message) + countTokens(model, historyTextForInputCount);
+        // Count output from the final response buffer
+        outputTokens = countTokens(model, responseBuffer);
+        console.log(`GPT Token Usage (tiktoken) - Input (approx): ${inputTokens}, Output: ${outputTokens}`);
+      } catch (error) {
+        console.error("Error counting tokens with tiktoken:", error);
+      }
+    } else if (geminiResponsePromise) {
+      const aggregatedResponse = await geminiResponsePromise;
+      if (aggregatedResponse && aggregatedResponse.usageMetadata) {
+        inputTokens = aggregatedResponse.usageMetadata.promptTokenCount || 0;
+        outputTokens = aggregatedResponse.usageMetadata.candidatesTokenCount || 0; // Sum across candidates if needed
+        console.log(`Gemini Token Usage - Input: ${inputTokens}, Output: ${outputTokens}`);
+      } else {
+        console.warn("Could not find token usage data in the Gemini aggregated response.");
+      }
+    }
+
+    // Update daily token count
+    if (inputTokens > 0 || outputTokens > 0) {
+      await dailyTokenTracker.updateTodaysUsage(inputTokens, outputTokens);
+      console.log(`Updated daily token usage: Input=${inputTokens}, Output=${outputTokens}`);
+    }
+    // --- End Token Counting Logic ---
+
+    // Append model response to history AFTER potentially getting tokens
     const shouldGenerateTitle = await chatManager.appendModelResponse(responseBuffer); // Check return value
 
     // Trigger title generation if needed
@@ -145,6 +201,16 @@ ipcMain.on('chatMessage', async (event, data) => {
   } catch (error) {
     event.sender.send('streamFinalResponse', { text: "Error: " + error.message });
   }
+});
+
+// Add cleanup hook for tiktoken encoders on app quit
+app.on('will-quit', () => {
+  cleanupEncoders();
+});
+
+// Handler to get initial token usage for the day
+ipcMain.handle('get-initial-token-usage', async () => {
+  return await dailyTokenTracker.getInitialUsage();
 });
 
 app.on('window-all-closed', () => {
