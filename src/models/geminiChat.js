@@ -6,33 +6,75 @@ const config = require('../../config');
 
 let geminiChat = null;
 
-function initialize(conversationHistory, toolDeclarations, modelName = "gemini-2.0-flash") {
+const genai = require('@google/genai'); // Import the whole module
+const GoogleGenerativeAI = genai.GoogleGenerativeAI; // Access constructor as property
+const HarmCategory = genai.HarmCategory; // Access HarmCategory
+const HarmBlockThreshold = genai.HarmBlockThreshold; // Access HarmBlockThreshold
+
+function initialize(conversationHistory, toolDeclarations, modelName = "gemini-1.5-flash-latest") { // Updated default model
   const systemPrompt = loadPrompt();
   const contextText = loadContext();
-  const ai = new GoogleGenAI({ apiKey: config.GEMINI_API_KEY });
-  geminiChat = ai.chats.create({
-    model: modelName,
-    history: conversationHistory,
-    config: {
-      systemInstruction: systemPrompt + "\n" + contextText,
-      tools: [{
-        functionDeclarations: toolDeclarations
-      }],
-      toolConfig: {
-        functionCallingConfig: {
-          mode: 'auto'
-        }
-      }
-    }
+  const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY); // Use the accessed constructor
+
+  const model = genAI.getGenerativeModel({
+      model: modelName,
+      // Pass system instruction and tools directly to getGenerativeModel
+      systemInstruction: {
+          // Structure system instruction correctly if needed (e.g., as parts)
+          // Assuming simple string works based on some examples, adjust if needed
+          parts: [{ text: systemPrompt + "\n" + contextText }]
+      },
+      tools: toolDeclarations, // Pass tool declarations array directly
+      toolConfig: { // Pass tool config directly
+          functionCallingConfig: { mode: 'AUTO' } // Mode often uppercase
+      },
+      // Optional: Add safety settings if needed
+      // safetySettings: [
+      //   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+      //   // ... other categories
+      // ]
   });
-  return geminiChat;
+
+  console.log(`[geminiChat] Initializing model ${modelName} with tools and system prompt.`);
+
+  // Start chat with history
+  try {
+      geminiChat = model.startChat({
+          history: conversationHistory,
+          // generationConfig can be added here if needed (temperature, maxOutputTokens, etc.)
+          // generationConfig: { temperature: 0.7, maxOutputTokens: 1000 }
+      });
+
+      if (!geminiChat) {
+          console.error("[geminiChat] Failed to initialize Gemini chat session (startChat returned null/undefined).");
+          return null;
+      }
+      console.log("[geminiChat] Gemini chat initialized successfully via startChat.");
+      return geminiChat;
+
+  } catch (error) {
+      console.error("[geminiChat] Error during model.startChat:", error);
+      // Log details that might be helpful
+      console.error("[geminiChat] Model Name:", modelName);
+      console.error("[geminiChat] History Length:", conversationHistory?.length);
+      console.error("[geminiChat] Tool Declarations Count:", toolDeclarations?.length);
+      return null; // Return null on error
+  }
 }
 
 async function sendMessageStream(chat, message) {
-  // sendMessageStream returns an object { stream, response }
-  // stream is the async iterator, response is a promise for the aggregated result
-  const result = await chat.sendMessageStream({ message });
-  return result; // Return the whole object { stream, response }
+  // Pass the message string directly, as per documentation examples for chat.
+  // The ContentUnion error likely stemmed from initialization, not this call.
+  console.log(`[geminiChat.sendMessageStream] Sending message: "${message.substring(0, 100)}..."`);
+  try {
+      const stream = await chat.sendMessageStream(message);
+      console.log("[geminiChat.sendMessageStream] Stream obtained successfully.");
+      return stream; // Return the stream directly
+  } catch (error) {
+      console.error("[geminiChat.sendMessageStream] Error sending message:", error);
+      // Re-throw or handle as appropriate for the application flow
+      throw error;
+  }
 }
 
 module.exports = { initialize, sendMessageStream };

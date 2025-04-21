@@ -5,7 +5,7 @@
     "main": "main.js",
     "scripts": {
         "start": "electron .",
-        "build:tailwind": "tailwindcss -i ./src/renderer/styles.css -o ./src/renderer/output.css --watch",
+        "build:tailwind": "tailwindcss -i ./src/renderer/css/main.css -o ./src/renderer/css/output.css --watch",
         "build": "electron-builder"
     },
     "dependencies": {

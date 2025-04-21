@@ -1,6 +1,10 @@
 // tailwind.config.js - Updated with custom theme
 module.exports = {
-  content: ["./src/renderer/**/*.{html,js}"],
+  content: [
+    "./src/renderer/**/*.{html,js}", // Scan HTML and JS files
+    "./src/renderer/components/**/*.js", // Scan potential future component JS files
+    "./src/renderer/css/main.css", // Scan our main CSS for Tailwind directives/classes
+  ],
   theme: {
     extend: {
       colors: {

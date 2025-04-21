@@ -1,0 +1,100 @@
+/* src/renderer/css/main.css - Tailwind CSS directives and custom base styles */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Add any custom base styles or component overrides here if needed later */
+body {
+  /* Smooth transitions for theme changes */
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+/* Custom Select Dropdown Styles */
+.custom-select-button {
+  @apply relative cursor-pointer transition-colors duration-150;
+  /* Base styles already applied inline via classes */
+}
+
+#modelSelectorDropdown {
+  @apply transition-all duration-100 ease-out;
+  /* Base styles already applied inline via classes */
+  /* Add transform for subtle animation */
+  transform: scale(0.95);
+  opacity: 0;
+  visibility: hidden; /* Use visibility for better accessibility than just display:none */
+}
+
+#modelSelectorDropdown.open {
+  @apply block; /* Tailwind class to override hidden */
+  transform: scale(1);
+  opacity: 1;
+  visibility: visible;
+}
+
+.custom-select-option {
+  @apply block w-full text-left px-4 py-2 text-sm cursor-pointer transition-colors duration-100;
+  color: var(--foreground-color); /* Ensure text color respects theme */
+}
+
+.custom-select-option:hover,
+.custom-select-option.selected { /* Add selected state styling */
+  background-color: var(--chat-list-hover-bg); /* Use chat list hover for consistency */
+  color: var(--chat-list-selected-text); /* Use selected text color */
+}
+
+.custom-select-option.selected {
+    font-weight: 500; /* Make selected slightly bolder */
+}
+/* Reusable Component Classes */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-bold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
+    /* Base focus ring offset color might need theme variable */
+    --tw-ring-offset-color: var(--background-color, #ffffff);
+  }
+  .btn-primary {
+    @apply btn text-[var(--button-text-color)] shadow-sm hover:shadow-md; /* Removed button-hover-effect */
+    /* Gradient applied via inline style for now, could be a class if static */
+    /* Example focus ring using accent color */
+     @apply focus:ring-[var(--accent-color)];
+  }
+  .btn-secondary { /* Example for potential future use */
+    @apply btn bg-[var(--secondary-color)] text-[var(--sidebar-text-color)] border border-[var(--border-color-soft)] hover:bg-gray-300 focus:ring-[var(--primary-color)];
+  }
+  .btn-icon {
+     @apply p-2 rounded-full transition-colors duration-150 focus:outline-none focus:ring-1;
+  }
+  .btn-header-icon {
+      /* Apply base color and opacity separately */
+      @apply btn-icon text-[var(--header-text-color)] opacity-80 hover:opacity-100 hover:text-[var(--header-text-color)] hover:bg-white/10 focus:ring-white/50;
+  }
+
+  .input-base {
+      @apply w-full border border-[var(--input-border-color)] rounded-lg p-2 bg-[var(--input-bg-color)] text-[var(--foreground-color)] transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--input-focus-ring-color)] focus:border-[var(--primary-color)];
+  }
+  .select-base { /* Specific styles for select appearance */
+      @apply input-base appearance-none cursor-pointer;
+      background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22%236b7280%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M5.293%207.293a1%201%200%20011.414%200L10%2010.586l3.293-3.293a1%201%200%20111.414%201.414l-4%204a1%201%200%2001-1.414%200l-4-4a1%201%200%20010-1.414z%22%20clip-rule%3D%22evenodd%22%20/%3E%3C/svg%3E'); /* Default arrow, consider theme variable for fill */
+      background-position: right 0.75rem center;
+      background-repeat: no-repeat;
+      background-size: 1em;
+      padding-right: 2.5rem; /* Make space for arrow */
+  }
+   .textarea-base {
+       @apply input-base resize-none overflow-hidden;
+       padding-right: 3.5rem; /* Keep space for send button */
+   }
+
+  .chat-list-item-base {
+      @apply p-2 rounded cursor-pointer text-sm truncate transition-colors duration-150;
+      /* Hover/selected styles applied via JS or specific classes */
+  }
+
+  .modal-content {
+      @apply bg-[var(--content-bg-color)] text-[var(--foreground-color)] p-6 rounded-xl shadow-xl relative border border-[var(--border-color-soft)];
+       --tw-shadow-color: var(--shadow-color);
+  }
+  .modal-close-button {
+      /* Apply base color and opacity separately */
+      @apply absolute top-3 right-3 text-[var(--foreground-color)] opacity-60 hover:opacity-100 hover:text-[var(--foreground-color)] p-1 transition-colors;
+  }
+}

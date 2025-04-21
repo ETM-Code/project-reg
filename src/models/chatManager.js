@@ -89,9 +89,21 @@ async function sendMessage(message) {
     const stream = await gptChatModel.sendMessageStream(conversationHistory, fullMessage, toolDeclarations, currentModel);
     return stream;
   } else {
-    // geminiChatModel.sendMessageStream now returns { stream, response }
-    const result = await geminiChatModel.sendMessageStream(geminiChat, fullMessage);
-    return result; // Return the full object
+    // Ensure geminiChat is initialized
+    if (!geminiChat) {
+      console.warn("[chatManager.sendMessage] Gemini chat instance not found, re-initializing.");
+      initialize(currentModel); // Re-initialize if null
+    }
+    // geminiChatModel.sendMessageStream now returns the stream directly.
+    const stream = await geminiChatModel.sendMessageStream(geminiChat, fullMessage);
+    if (!stream) { // Check if the stream itself is valid
+      console.error("[chatManager.sendMessage] Failed to get stream from Gemini.");
+      // Handle error appropriately - maybe return an empty stream or throw?
+      // For now, let's throw to make the error explicit.
+      throw new Error("Failed to get stream from Gemini model.");
+    }
+    // Return the stream directly
+    return stream;
   }
 }
 
@@ -156,31 +168,62 @@ async function startNewChat() {
 // Modify editMessage to use messageId
 async function editMessage(messageId, newContent) {
   const messageIndex = conversationHistory.findIndex(msg => msg.id === messageId);
-  console.log(`[chatManager.editMessage] Received ID: ${messageId}. Found index: ${messageIndex}. History length: ${conversationHistory.length}`); // Add log
+  console.log(`[chatManager.editMessage] Received ID: ${messageId}. Found index: ${messageIndex}. History length: ${conversationHistory.length}`); // Keep log
 
   if (messageIndex !== -1) { // Check if message was found
-    // 1. Backup the current version before editing
-    await chatStorage.backupChatVersion(currentChatId);
+    // 1. Backup the current version before editing (Optional but good practice)
+    // await chatStorage.backupChatVersion(currentChatId); // Keep or remove based on need
 
     // 2. Update the content of the target message
-    // Optional: Add check to ensure it's a user message being edited
     if (conversationHistory[messageIndex].role !== 'user') {
         console.error(`[chatManager.editMessage] Attempted to edit non-user message ID: ${messageId}`);
-        return null; // Prevent editing non-user messages
+        // Return an object indicating failure
+        return { success: false, error: 'Cannot edit non-user messages.' };
     }
-    conversationHistory[messageIndex].parts[0].text = newContent;
+    // Ensure parts exists and has at least one element
+    if (!conversationHistory[messageIndex].parts || conversationHistory[messageIndex].parts.length === 0) {
+        conversationHistory[messageIndex].parts = [{ text: newContent }];
+    } else {
+        conversationHistory[messageIndex].parts[0].text = newContent;
+    }
 
-    // 3. Truncate history after the edited message
+
+    // 3. Truncate history *after* the edited message
     conversationHistory = conversationHistory.slice(0, messageIndex + 1);
 
     // 4. Save the truncated history (this becomes the new "current" state)
     await chatStorage.saveChat(currentChatId, conversationHistory, currentModel); // Save truncated history
 
-    // 5. Return the edited message content for resubmission
-    return newContent;
+    // 5. Trigger model response with the edited content and truncated history
+    console.log(`[chatManager.editMessage] Edit successful for ${messageId}. Triggering model response.`);
+    // We use the 'newContent' which already includes metadata if it was present during edit.
+    // The model's sendMessageStream function expects the *last* message content.
+    if (currentModel.startsWith("gpt")) {
+        const stream = await gptChatModel.sendMessageStream(conversationHistory, newContent, toolDeclarations, currentModel);
+        // Return the stream directly (or wrap in a success object if needed by IPC)
+        return stream; // Assuming IPC handler expects the stream for GPT
+    } else {
+      // Ensure geminiChat is initialized
+      if (!geminiChat) {
+        console.warn("[chatManager.editMessage] Gemini chat instance not found, re-initializing.");
+        initialize(currentModel); // Re-initialize if null
+      }
+      // geminiChatModel.sendMessageStream now returns the stream directly.
+      const stream = await geminiChatModel.sendMessageStream(geminiChat, newContent);
+      if (!stream) { // Check if the stream itself is valid
+        console.error("[chatManager.editMessage] Failed to get stream from Gemini on edit.");
+        throw new Error("Failed to get stream from Gemini model during edit.");
+      }
+      // Return the stream directly
+      return stream;
+    }
+    // Note: We are returning the stream directly now.
+    // The stream/result object now signifies success and contains the model's response flow.
   }
   console.error(`[chatManager.editMessage] Message ID ${messageId} not found in history.`); // Log failure
-  return null; // Indicate failure if ID not found
+  // Return null or an error object if the edit itself failed (message not found)
+  // Returning null might be ambiguous; let's return an error structure consistent with model failures
+  return { error: `Message ID ${messageId} not found.` }; // Indicate edit failure clearly
 }
 
 // New function to handle the title generation logic
@@ -240,15 +283,15 @@ async function loadChat(chatId) {
 }
 
 module.exports = {
-  initialize, 
-  sendMessage, 
-  appendModelResponse, 
-  currentModel: currentModelFunc, 
+  initialize,
+  sendMessage,
+  appendModelResponse,
+  currentModel: currentModelFunc,
   toolDeclarations,
   startNewChat,
-  editMessage,
+  editMessage, // Make sure it's exported
   getCurrentChatId,
   loadChat,
   getConversationHistory,
-  triggerTitleGeneration // Export the new function
+  triggerTitleGeneration
 };

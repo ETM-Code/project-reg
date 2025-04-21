@@ -1,0 +1,124 @@
+/* src/renderer/css/themes.css - Color theme definitions */
+
+:root {
+  /* Default Theme (Enhanced) */
+  --primary-color: #4f46e5;      /* Indigo 600 */
+  --primary-gradient: linear-gradient(to right, #4f46e5, #6366f1); /* Indigo 600 to 500 */
+  --secondary-color: #f3f4f6;    /* Gray 100 (lighter sidebar) */
+  --accent-color: #14b8a6;       /* Teal 500 */
+  --accent-hover-color: #0d9488; /* Teal 600 */
+  --accent-gradient: linear-gradient(to right, #14b8a6, #2dd4bf); /* Teal 500 to 400 */
+  --background-color: #ffffff;   /* White */
+  --foreground-color: #1f2937;   /* Gray 800 (darker text) */
+  --content-bg-color: #f9fafb;   /* Gray 50 (slightly off-white chat area) */
+  --user-bubble-bg: #DBEAFE;     /* Blue 100 */
+  --user-bubble-text: #1e40af;   /* Blue 800 */
+  --bot-bubble-bg: #E5E7EB;      /* Gray 200 */
+  --bot-bubble-text: #374151;    /* Gray 700 */
+  --input-bg-color: #ffffff;     /* White */
+  --input-border-color: #D1D5DB; /* Gray 300 */
+  --input-focus-ring-color: rgba(79, 70, 229, 0.4); /* primary/40 */
+  --button-text-color: #ffffff;  /* White */
+  --link-color: var(--primary-color);
+  --header-bg-color: var(--primary-color); /* Keep solid or use gradient */
+  /* --header-bg-gradient: var(--primary-gradient); */
+  --header-text-color: var(--button-text-color);
+  --sidebar-bg-color: var(--secondary-color);
+  --sidebar-text-color: #4b5563; /* Gray 600 */
+  --chat-list-hover-bg: #e5e7eb; /* Gray 200 */
+  --chat-list-selected-bg: #dbeafe; /* Blue 100 */
+  --chat-list-selected-text: #1e40af; /* Blue 800 */
+  --scrollbar-thumb-color: #9ca3af; /* Gray 400 */
+  --scrollbar-track-color: var(--secondary-color);
+  --border-color-soft: #e5e7eb; /* Gray 200 */
+  --shadow-color: rgba(0, 0, 0, 0.05);
+}
+
+body.theme-dark {
+  /* Dark Theme Variables */
+  --primary-color: #6366f1;      /* Indigo 500 */
+  --primary-gradient: linear-gradient(to right, #6366f1, #818cf8); /* Indigo 500 to 400 */
+  --secondary-color: #1f2937;    /* Gray 800 */
+  --accent-color: #2dd4bf;       /* Teal 400 */
+  --accent-hover-color: #5eead4; /* Teal 300 */
+  --accent-gradient: linear-gradient(to right, #2dd4bf, #5eead4); /* Teal 400 to 300 */
+  --background-color: #111827;   /* Gray 900 */
+  --foreground-color: #d1d5db;   /* Gray 300 */
+  --content-bg-color: #1f2937;   /* Gray 800 */
+  --user-bubble-bg: #3730a3;     /* Indigo 800 */
+  --user-bubble-text: #e0e7ff;   /* Indigo 100 */
+  --bot-bubble-bg: #374151;      /* Gray 700 */
+  --bot-bubble-text: #d1d5db;    /* Gray 300 */
+  --input-bg-color: #374151;     /* Gray 700 */
+  --input-border-color: #4b5563; /* Gray 600 */
+  --input-focus-ring-color: rgba(99, 102, 241, 0.5); /* Indigo 500 / 50% */
+  --button-text-color: #ffffff;  /* White */
+  --link-color: var(--accent-color);
+  --header-bg-color: #1f2937; /* Darker header */
+  /* --header-bg-gradient: linear-gradient(to right, #1f2937, #374151); */
+  --header-text-color: var(--foreground-color);
+  --sidebar-bg-color: #111827; /* Match background */
+  --sidebar-text-color: #9ca3af; /* Gray 400 */
+  --chat-list-hover-bg: #374151; /* Gray 700 */
+  --chat-list-selected-bg: #4338ca; /* Indigo 700 */
+  --chat-list-selected-text: #e0e7ff; /* Indigo 100 */
+  --scrollbar-thumb-color: #4b5563; /* Gray 600 */
+  --scrollbar-track-color: #374151; /* Gray 700 */
+  --border-color-soft: #374151; /* Gray 700 */
+  --shadow-color: rgba(0, 0, 0, 0.2);
+}
+
+body.theme-light {
+  /* Light Theme Variables (Distinct from Default) */
+   --primary-color: #4f46e5;
+   --primary-gradient: linear-gradient(to right, #4f46e5, #6366f1);
+   --secondary-color: #f9fafb; /* Gray 50 */
+   --accent-color: #14b8a6;
+   --accent-hover-color: #0d9488;
+   --accent-gradient: linear-gradient(to right, #14b8a6, #2dd4bf);
+   --background-color: #ffffff; /* Pure white */
+   --foreground-color: #1f2937; /* Darker text */
+   --content-bg-color: #ffffff; /* White chat area */
+   --user-bubble-bg: #e0e7ff; /* Indigo 100 */
+   --user-bubble-text: #3730a3; /* Indigo 800 */
+   --bot-bubble-bg: #f3f4f6; /* Gray 100 */
+   --bot-bubble-text: #374151; /* Gray 700 */
+   --input-bg-color: #ffffff;
+   --input-border-color: #e5e7eb; /* Gray 200 */
+   --input-focus-ring-color: rgba(79, 70, 229, 0.4);
+   --button-text-color: #ffffff;
+   --link-color: var(--primary-color);
+   --header-bg-color: var(--primary-color);
+   /* --header-bg-gradient: var(--primary-gradient); */
+   --header-text-color: var(--button-text-color);
+   --sidebar-bg-color: var(--secondary-color);
+   --sidebar-text-color: #4b5563;
+   --chat-list-hover-bg: #f3f4f6; /* Gray 100 */
+   --chat-list-selected-bg: #e0e7ff; /* Indigo 100 */
+   --chat-list-selected-text: #3730a3; /* Indigo 800 */
+   --scrollbar-thumb-color: #bec3cc; /* Lighter gray */
+   --scrollbar-track-color: var(--secondary-color);
+   --border-color-soft: #f3f4f6; /* Gray 100 */
+   --shadow-color: rgba(0, 0, 0, 0.03);
+}
+
+/* Basic Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track-color);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-color);
+  border-radius: 4px;
+  border: 2px solid var(--scrollbar-track-color); /* Creates padding around thumb */
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--scrollbar-thumb-color) 80%, black); /* Darken thumb on hover */
+}
+::-webkit-scrollbar-corner {
+  background: transparent; /* Hide bottom-right corner */
+}

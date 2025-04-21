@@ -1,0 +1,43 @@
+/* src/renderer/css/animations.css - Custom animations and transitions */
+
+/* Placeholder for loading animations, button effects, etc. */
+
+/* Example: A simple fade-in animation */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Example: Subtle scale on hover for buttons */
+.button-hover-effect {
+  transition: transform 0.2s ease-in-out;
+}
+.button-hover-effect:hover {
+  transform: scale(1.03);
+}
+
+/* Loading spinner styles will go here */
+.loading-spinner {
+  /* Styles for the spinner element */
+}
+
+/* Thinking dots animation */
+@keyframes thinking-dots {
+  0%, 20% { content: '.'; }
+  40% { content: '..'; }
+  60%, 100% { content: '...'; }
+}
+
+.thinking-dots::after {
+  content: '.';
+  animation: thinking-dots 1.5s infinite steps(1, end);
+  display: inline-block; /* Or block depending on layout */
+  vertical-align: bottom;
+  overflow: hidden; /* Prevents dots from causing layout shifts */
+  width: 1.2em; /* Adjust width as needed */
+  text-align: left;
+}

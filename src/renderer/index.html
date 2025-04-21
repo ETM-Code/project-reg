@@ -4,79 +4,150 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Project Reg</title>
-  <link href="output.css" rel="stylesheet">
-  <!-- Marked library for rendering Markdown -->
+  <link href="css/output.css" rel="stylesheet">
+  <link href="css/themes.css" rel="stylesheet">
+  <link href="css/animations.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
-<body class="bg-background text-foreground">
+<body class="bg-[var(--background-color)] text-[var(--foreground-color)]">
   <div class="flex flex-col h-screen">
-    <!-- Header: Added flex justify-between items-center -->
-    <div class="bg-primary text-white p-4 flex-shrink-0 flex justify-between items-center">
-      <h1 class="text-2xl font-bold">Project Reg</h1>
-      <!-- Token Counter Display -->
-      <div id="tokenCounterDisplay" class="text-sm">
-        Today's Tokens: Loading...
+    <!-- Header: Apply shadow -->
+    <div class="bg-[var(--header-bg-color)] text-[var(--header-text-color)] p-4 flex-shrink-0 flex justify-between items-center shadow-md" style="--tw-shadow-color: var(--shadow-color); box-shadow: 0 2px 4px -1px var(--shadow-color);">
+      <div class="flex items-center space-x-3">
+        <h1 class="text-2xl font-bold">Project Reg</h1>
+        <!-- Custom Model Selector -->
+        <div id="customModelSelector" class="relative">
+          <button id="modelSelectorBtn" type="button" class="custom-select-button inline-flex items-center justify-between w-full rounded-md border border-transparent px-3 py-1 bg-white/10 text-[var(--header-text-color)]/90 hover:bg-white/20 focus:outline-none focus:ring-1 focus:ring-white/50 text-sm transition-colors">
+            <span id="modelSelectorBtnText" class="truncate pr-1">Select Model</span> <!-- Added truncate -->
+            <!-- Heroicon: chevron-down -->
+            <svg class="ml-1 h-4 w-4 text-[var(--header-text-color)]/70 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+          </button>
+          <!-- Dropdown panel -->
+          <div id="modelSelectorDropdown" class="origin-top-left absolute left-0 mt-1 w-56 rounded-md shadow-lg bg-[var(--content-bg-color)] ring-1 ring-black ring-opacity-5 focus:outline-none hidden z-20 border border-[var(--border-color-soft)] max-h-60 overflow-y-auto custom-scrollbar" role="menu" aria-orientation="vertical" aria-labelledby="modelSelectorBtn">
+            <div id="modelSelectorOptions" class="py-1" role="none">
+              <!-- Options will be populated by JS -->
+              <!-- Example: <a href="#" class="custom-select-option block px-4 py-2 text-sm text-[var(--foreground-color)] hover:bg-[var(--chat-list-hover-bg)]" role="menuitem" data-value="model-id">Model Name</a> -->
+            </div>
+          </div>
+        </div>
+        <!-- Keep original select hidden to store value easily -->
+        <select id="modelSelector" class="hidden">
+          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+          <option value="gemini-2.5-pro-exp-03-25">Gemini 2.5 Pro</option>
+          <option value="gpt-4o">GPT-4O</option>
+          <option value="gpt-4o-mini" selected>GPT-4O-Mini</option>
+          <option value="gpt-4.5-preview">GPT-4.5</option>
+          <option value="gpt-4.1">GPT-4.1</option>
+          <option value="gpt-4.1-mini">GPT-4.1-Mini</option>
+          <option value="gpt-4.1-nano">GPT-4.1-Nano</option> 
+          <option value="o4-mini">O4 Mini</option>
+        </select>
+      </div>
+      <div class="flex items-center space-x-4">
+        <!-- Token Counter Display -->
+        <div id="tokenCounterDisplay" class="text-sm opacity-90">
+          Today's Tokens: Loading...
+        </div>
+        <!-- Settings Button -->
+        <button id="settingsBtn" class="btn-header-icon" aria-label="Settings">
+          <i class="fas fa-cog"></i>
+        </button>
       </div>
     </div>
 
-    <div class="flex flex-1 overflow-hidden"> <!-- Main content area (changed to flex row) -->
+    <div class="flex flex-1 overflow-hidden"> <!-- Main content area -->
 
-      <!-- Sidebar -->
-      <div class="w-64 bg-secondary p-4 flex flex-col flex-shrink-0 border-r border-gray-300">
-        <button id="newChatBtn" class="flex items-center justify-center bg-accent hover:bg-accent-hover text-white font-bold py-2 px-4 rounded mb-4 w-full">
+      <!-- Sidebar: Use softer border -->
+      <div class="w-64 bg-[var(--sidebar-bg-color)] text-[var(--sidebar-text-color)] p-4 flex flex-col flex-shrink-0 border-r border-[var(--border-color-soft)]">
+        <!-- New Chat Button: Apply gradient, rounded shape -->
+        <button id="newChatBtn" class="btn-primary mb-4 w-full" style="background: var(--accent-gradient); --tw-shadow-color: var(--shadow-color);">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
           New Chat
         </button>
-        <h2 class="text-lg font-semibold mb-2 text-foreground">Saved Chats</h2>
-        <div id="chatList" class="flex-1 overflow-y-auto space-y-2">
+        <h2 class="text-lg font-semibold mb-3 text-[var(--foreground-color)]">Saved Chats</h2>
+        <div id="chatList" class="flex-1 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
           <!-- Saved chats will be listed here -->
+          <!-- JS applies styles like --chat-list-hover-bg, --chat-list-selected-bg, --chat-list-selected-text -->
         </div>
       </div>
 
-      <!-- Chat Area (wrapped in a new div) -->
-      <div class="flex flex-col flex-1 overflow-hidden p-2">
-        <div id="chatWindow" class="flex-1 overflow-y-auto p-4 space-y-4 bg-content-bg rounded-lg shadow-sm mb-2">
+      <!-- Chat Area -->
+      <div class="flex flex-col flex-1 overflow-hidden p-2 relative bg-[var(--background-color)]">
+        <!-- Loading Indicator removed from here -->
+
+        <!-- Chat Window: Use softer border, custom scrollbar -->
+        <div id="chatWindow" class="flex-1 overflow-y-auto p-4 space-y-4 bg-[var(--content-bg-color)] rounded-lg shadow-inner mb-2 border border-[var(--border-color-soft)] custom-scrollbar" style="--tw-shadow-color: var(--shadow-color);">
           <!-- Chat messages get appended here -->
         </div>
-        <div class="p-4 border-t border-gray-300 bg-background flex-shrink-0 rounded-b-lg"> <!-- Input Area -->
-          <!-- Model selector -->
-          <div class="relative mb-2">
-        <select id="modelSelector" class="border border-gray-300 rounded p-2 bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
-          <option value="gemini-2.0-flash" >Gemini 2.0 Flash</option>
-          <option value="gemini-2.5-pro-exp-03-25">Gemini 2.5 Pro</option>
-          <option value="gpt-4o" >GPT-4O</option>
-          <option value="gpt-4o-mini"selected>GPT-4O-Mini</option>
-          <option value="gpt-4.5-preview">GPT-4.5</option>
-          <option value="gpt-4.1">GPT-4.1</option>
-          <option value="gpt-4.1-mini">GPT-4.1-Mini</option>
-          <option value="o4-mini">O4 Mini</option>  
-        </select>
-      </div>
-      <div class="relative">
-        <textarea
-          id="userInput"
-          class="w-full border border-gray-300 rounded p-2 pr-12 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary bg-white text-foreground"
-          rows="1"
-          placeholder="Type your message (Shift+Enter for newline, Enter to send)..."
-          style="padding-right: 3.5rem;"
-        ></textarea>
-        <button
-          id="sendBtn"
-          class="absolute right-2 bottom-1.5 bg-accent hover:bg-accent-hover text-white p-2 rounded-full flex items-center justify-center"
-          aria-label="Send message"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
-          </svg>
-        </button>
-      </div>
+        <!-- Input Area: Use softer border -->
+        <div class="p-4 border-t border-[var(--border-color-soft)] bg-[var(--background-color)] flex-shrink-0 rounded-b-lg">
+          <!-- Model selector removed from here -->
+          <div class="relative"> <!-- Removed flex items-end -->
+            <textarea
+              id="userInput"
+              class="textarea-base"
+              rows="1"
+              placeholder="Type your message (Shift+Enter for newline, Enter to send)..."
+              style="padding-right: 3.5rem; min-height: 42px; max-height: 200px;"
+            ></textarea>
+            <!-- Send Button: Apply gradient, adjust position slightly -->
+            <button
+              id="sendBtn"
+              class="absolute right-2 bottom-[9px] btn-primary p-2"
+              style="background: var(--accent-gradient); --tw-shadow-color: var(--shadow-color);"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+              </svg>
+            </button>
+            <!-- Cancel Edit Button Placeholder -->
+          </div>
         </div>
+      </div>
     </div>
   </div>
 
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 hidden p-4">
+      <div class="modal-content max-w-md w-full"> <!-- Use modal component class -->
+          <button id="closeSettingsBtn" class="modal-close-button" aria-label="Close settings"> <!-- Use modal component class -->
+              <i class="fas fa-times fa-lg"></i>
+          </button>
+          <h2 class="text-xl font-semibold mb-6">Settings</h2>
+          <div class="space-y-5">
+              <div>
+                  <label for="themeSelector" class="block text-sm font-medium mb-1">Color Theme</label>
+                  <select id="themeSelector" class="select-base focus:ring-1"> <!-- Use select component class, override focus ring -->
+                      <option value="default">Default</option>
+                      <option value="light">Light</option>
+                      <option value="dark">Dark</option>
+                  </select>
+              </div>
+              <!-- Add other settings here later -->
+          </div>
+      </div>
+  </div>
+
   <script src="app.js"></script>
-  <script src="chatHistory.js"></script> <!-- Add script for chat history UI -->
+  <script src="chatHistory.js"></script>
+  <script src="components/autoResizeInput.js"></script>
+  <script src="components/loadingIndicator.js"></script>
+  <script src="components/settingsModal.js"></script>
+  <script src="components/customDropdown.js"></script> <!-- Add custom dropdown script -->
+  <!-- Add class for custom scrollbars -->
+  <style>
+    .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: var(--scrollbar-track-color); border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background-color: var(--scrollbar-thumb-color); border-radius: 4px; border: 2px solid var(--scrollbar-track-color); }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--scrollbar-thumb-color) 80%, black); }
+    .custom-scrollbar::-webkit-scrollbar-corner { background: transparent; }
+    /* For Firefox */
+    .custom-scrollbar { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb-color) var(--scrollbar-track-color); }
+  </style>
 </body>
 </html>
