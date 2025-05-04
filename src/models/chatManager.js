@@ -73,54 +73,114 @@ function initialize(modelName) {
 }
 
 async function sendMessage(message) {
-  // Add metadata to the message
+   // User message is now added separately by appendUserMessage before calling this
+   // We just need the latest message content for the API call itself in some cases (Gemini)
+   // For GPT, the full history is passed anyway.
+   const lastUserMessageContent = conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'user'
+       ? conversationHistory[conversationHistory.length - 1].parts[0].text
+       : message; // Fallback to original message if history is empty or last wasn't user
+
+   if (currentModel.startsWith("gpt")) {
+     // GPT uses the full history passed in
+     // The 'message' parameter here isn't strictly needed by gptChatModel.sendMessageStream
+     // as it rebuilds from history, but we pass it for consistency.
+     // We pass the *current* conversation history.
+     const stream = await gptChatModel.sendMessageStream(conversationHistory, lastUserMessageContent, toolDeclarations, currentModel);
+     return stream;
+   } else {
+     // Ensure geminiChat is initialized
+     if (!geminiChat) {
+       console.warn("[chatManager.sendMessage] Gemini chat instance not found, re-initializing.");
+       initialize(currentModel); // Re-initialize if null
+     }
+     // geminiChatModel.sendMessageStream now returns the stream directly.
+     // Gemini's sendMessageStream takes the *new* message content.
+     const stream = await geminiChatModel.sendMessageStream(geminiChat, lastUserMessageContent);
+     if (!stream) { // Check if the stream itself is valid
+       console.error("[chatManager.sendMessage] Failed to get stream from Gemini.");
+       // Handle error appropriately - maybe return an empty stream or throw?
+       // For now, let's throw to make the error explicit.
+       throw new Error("Failed to get stream from Gemini model.");
+     }
+     // Return the stream directly
+     return stream;
+   }
+}
+
+// New function to add user message separately
+function appendUserMessage(message) {
   const now = new Date();
   const timeDiff = conversationHistory.lastMessageTime ? Math.round((now - conversationHistory.lastMessageTime) / 1000) : 0;
   conversationHistory.lastMessageTime = now;
   const metadata = `Date: ${now.toLocaleDateString()} | Time: ${now.toLocaleTimeString()} | Since last msg: ${timeDiff}s\n`;
   const fullMessage = metadata + message;
+  const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   conversationHistory.push({
-    id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, // Add unique ID
+    id: messageId,
     role: "user",
     parts: [{ text: fullMessage }]
   });
-  
-  if (currentModel.startsWith("gpt")) {
-    const stream = await gptChatModel.sendMessageStream(conversationHistory, fullMessage, toolDeclarations, currentModel);
-    return stream;
-  } else {
-    // Ensure geminiChat is initialized
-    if (!geminiChat) {
-      console.warn("[chatManager.sendMessage] Gemini chat instance not found, re-initializing.");
-      initialize(currentModel); // Re-initialize if null
-    }
-    // geminiChatModel.sendMessageStream now returns the stream directly.
-    const stream = await geminiChatModel.sendMessageStream(geminiChat, fullMessage);
-    if (!stream) { // Check if the stream itself is valid
-      console.error("[chatManager.sendMessage] Failed to get stream from Gemini.");
-      // Handle error appropriately - maybe return an empty stream or throw?
-      // For now, let's throw to make the error explicit.
-      throw new Error("Failed to get stream from Gemini model.");
-    }
-    // Return the stream directly
-    return stream;
-  }
+  return messageId; // Return the ID if needed elsewhere
 }
 
-async function appendModelResponse(responseText) { // Make async
-  conversationHistory.push({
+// Modified: Now takes optional tool_calls from GPT response
+async function appendModelResponse(responseText, toolCalls = null) { // Make async, add toolCalls param
+  const messageData = {
     id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, // Add unique ID
     role: "model",
     parts: [{ text: responseText }]
-  });
-  await chatStorage.saveChat(currentChatId, conversationHistory, currentModel); // Save history
+  };
 
-  // Check if this is the first model response to trigger title generation
-  if (conversationHistory.length === 2) {
-    // Return a flag or the title itself to indicate generation should be attempted
-    return true; // Indicate title generation should be triggered
+  // If GPT tool calls are present, add them to the message object
+  if (toolCalls && currentModel.startsWith("gpt")) {
+      messageData.tool_calls = toolCalls; // Store the raw tool_calls array from OpenAI
   }
-  return false; // Indicate no title generation needed this time
+
+  conversationHistory.push(messageData); // Push the potentially augmented messageData
+  // Removed saveChat from here, will be called once at the end
+
+  // Title generation check remains the same logic (based on history length)
+  return conversationHistory.length === 2; // Return true if title gen should be triggered
+}
+
+// New function to append tool/function call results
+async function appendToolResponseMessage(toolCallId, toolName, result) {
+    console.log(`[chatManager] Appending tool response for ${toolName} (ID: ${toolCallId})`);
+    let toolResponseEntry;
+
+    if (currentModel.startsWith("gpt")) {
+        // GPT format: Requires role 'tool' and tool_call_id
+        toolResponseEntry = {
+            id: `tool_${toolCallId}_${Date.now()}`, // Unique ID for the tool response
+            role: "tool",
+            tool_call_id: toolCallId, // Link to the specific tool call
+            name: toolName, // Function name
+            content: JSON.stringify(result) // Result must be a string
+        };
+    } else {
+        // Gemini format: Requires role 'function' and parts structure
+        toolResponseEntry = {
+            id: `func_${toolName}_${Date.now()}`, // Unique ID for the function response
+            role: "function", // Gemini uses 'function' role for results
+            parts: [{
+                functionResponse: {
+                    name: toolName,
+                    response: {
+                        // The actual result content goes here. Gemini expects an object.
+                        // Ensure 'result' is structured appropriately if it's not already.
+                        // If 'result' is just a string, wrap it: { content: result }
+                        // If 'result' is already an object, use it directly.
+                        // Let's assume 'result' is the final object payload.
+                        name: toolName, // Include name again inside response for clarity/consistency
+                        content: result // Assuming result is the object/value expected
+                    }
+                }
+            }]
+        };
+    }
+
+    conversationHistory.push(toolResponseEntry);
+    // No need to save here, save happens once at the end of the interaction in main.js
 }
 
 function currentModelFunc() {
@@ -284,12 +344,14 @@ async function loadChat(chatId) {
 
 module.exports = {
   initialize,
+  appendUserMessage, // Export new function
   sendMessage,
   appendModelResponse,
+  appendToolResponseMessage, // Export new function
   currentModel: currentModelFunc,
   toolDeclarations,
   startNewChat,
-  editMessage, // Make sure it's exported
+  editMessage,
   getCurrentChatId,
   loadChat,
   getConversationHistory,

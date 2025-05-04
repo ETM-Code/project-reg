@@ -25,7 +25,7 @@ function initialize(conversationHistory, toolDeclarations, modelName = "gemini-1
           parts: [{ text: systemPrompt + "\n" + contextText }]
       },
       tools: toolDeclarations, // Pass tool declarations array directly
-      toolConfig: { // Pass tool config directly
+      toolConfig: { // Pass tool config directly (Gemini specific)
           functionCallingConfig: { mode: 'AUTO' } // Mode often uppercase
       },
       // Optional: Add safety settings if needed
@@ -40,6 +40,9 @@ function initialize(conversationHistory, toolDeclarations, modelName = "gemini-1
   // Start chat with history
   try {
       geminiChat = model.startChat({
+          // Filter history for Gemini compatibility if needed, though it should handle user/model/function roles
+          // Ensure the format matches what startChat expects.
+          // The structure added in chatManager.appendToolResponseMessage should be compatible.
           history: conversationHistory,
           // generationConfig can be added here if needed (temperature, maxOutputTokens, etc.)
           // generationConfig: { temperature: 0.7, maxOutputTokens: 1000 }
@@ -63,11 +66,16 @@ function initialize(conversationHistory, toolDeclarations, modelName = "gemini-1
 }
 
 async function sendMessageStream(chat, message) {
-  // Pass the message string directly, as per documentation examples for chat.
-  // The ContentUnion error likely stemmed from initialization, not this call.
-  console.log(`[geminiChat.sendMessageStream] Sending message: "${message.substring(0, 100)}..."`);
+  if (!chat) {
+      console.error("[geminiChat.sendMessageStream] Chat session is not initialized.");
+      throw new Error("Gemini chat session not initialized.");
+  }
+  // Pass the message string directly.
+  console.log(`[geminiChat.sendMessageStream] Sending message: "${message?.substring(0, 100)}..."`);
   try {
-      const stream = await chat.sendMessageStream(message);
+      // Ensure message is not null or undefined
+      const messageToSend = message || "";
+      const stream = await chat.sendMessageStream(messageToSend);
       console.log("[geminiChat.sendMessageStream] Stream obtained successfully.");
       return stream; // Return the stream directly
   } catch (error) {

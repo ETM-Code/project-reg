@@ -39,7 +39,15 @@ function transformHistoryForGPT(conversationHistory) {
     if (msg.role === "user") {
       messages.push({ role: "user", content: msg.parts[0].text });
     } else if (msg.role === "model") {
-      messages.push({ role: "assistant", content: msg.parts[0].text });
+      // Check if the model message includes tool_calls (GPT format)
+      if (msg.tool_calls && msg.tool_calls.length > 0) {
+        messages.push({ role: "assistant", content: msg.parts[0].text || null, tool_calls: msg.tool_calls }); // content can be null if only tool calls
+      } else {
+        messages.push({ role: "assistant", content: msg.parts[0].text });
+      }
+    } else if (msg.role === "tool") {
+      // Add tool responses to the history for GPT
+      messages.push({ role: "tool", tool_call_id: msg.tool_call_id, name: msg.name, content: msg.content });
     }
   }
   return messages;
@@ -47,11 +55,14 @@ function transformHistoryForGPT(conversationHistory) {
 
 async function sendMessageStream(conversationHistory, message, toolDeclarations, modelName) {
   const messages = transformHistoryForGPT(conversationHistory);
+  console.log("[gptChat] Sending messages to OpenAI:", JSON.stringify(messages, null, 2)); // Log messages being sent
   try {
     const stream = await openaiClient.chat.completions.create({
       model: modelName,
       messages: messages,
-      functions: toolDeclarations, // Provide function declarations for GPT tool calling
+      // Map toolDeclarations to the format expected by the 'tools' parameter
+      tools: toolDeclarations.map(tool => ({ type: "function", function: tool })),
+      tool_choice: "auto", // Let the model decide whether to use tools
       stream: true,
       temperature: 0.9,        // Adds unpredictability and boldness
       top_p: 0.95,             // Samples from a wider token pool for a more human-like feel
@@ -60,7 +71,8 @@ async function sendMessageStream(conversationHistory, message, toolDeclarations,
     });
     return stream;
   } catch (error) {
-    throw error;
+    console.error("[gptChat] Error calling OpenAI API:", error); // Log the specific error
+    throw error; // Re-throw the error to be caught by the caller
   }
 }
 
