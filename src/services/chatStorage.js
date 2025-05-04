@@ -1,38 +1,42 @@
 const fs = require('fs').promises;
 const path = require('path');
+const settingsManager = require('../config/settingsManager'); // Import settingsManager
 
-const CHATS_DIR = path.join(__dirname, '../../data/chats');
-const VERSIONS_DIR = path.join(__dirname, '../../data/chat_versions'); // Directory for backups
+// REMOVED: Hardcoded paths CHATS_DIR and VERSIONS_DIR
 
 class ChatStorage {
   constructor() {
-    this.ensureChatsDirectory();
+    // REMOVED: this.ensureChatsDirectory(); - Directories ensured on demand
   }
 
-  async ensureChatsDirectory() {
+  // Helper to get configured paths, ensuring settings are loaded
+  _getPaths() {
+    return settingsManager.getPaths(); // Assumes settingsManager is initialized
+  }
+
+  // Helper to ensure a directory exists
+  async _ensureDirectoryExists(dirPath) {
     try {
-      await fs.mkdir(CHATS_DIR, { recursive: true });
+      await fs.mkdir(dirPath, { recursive: true });
     } catch (error) {
-      console.error('Error creating chats directory:', error);
+      console.error(`Error creating directory ${dirPath}:`, error);
+      throw error; // Re-throw to indicate failure
     }
   }
 
-  // Ensure the versions directory exists
-  async ensureVersionsDirectory() {
-    try {
-      await fs.mkdir(VERSIONS_DIR, { recursive: true });
-    } catch (error) {
-      console.error('Error creating chat versions directory:', error);
-    }
-  }
 
-  async saveChat(chatId, history, model) {
-    console.log("Saved Chat")
-    // This initial save might be overwritten shortly after by title generation
-    await this.ensureChatsDirectory(); // Ensure directory exists before saving
+  async saveChat(chatId, history, model, personalityId) { // Add personalityId parameter
+    console.log(`Saving Chat: ${chatId} with personality: ${personalityId}`);
+    const paths = this._getPaths();
+    const chatsDir = paths.chats;
+    if (!chatsDir) throw new Error("Chats directory path not configured.");
+
+    await this._ensureDirectoryExists(chatsDir); // Ensure directory exists before saving
+
     const chatData = {
       id: chatId,
       model,
+      personalityId, // Save the personality ID
       history,
       lastUpdated: Date.now(),
       title: this.generateDefaultTitle(history), // Use default initially
@@ -41,9 +45,10 @@ class ChatStorage {
 
     try {
       await fs.writeFile(
-        path.join(CHATS_DIR, `${chatId}.json`),
-        JSON.stringify(chatData)
+        path.join(chatsDir, `${chatId}.json`),
+        JSON.stringify(chatData, null, 2) // Add formatting
       );
+      console.log(`Chat ${chatId} saved successfully.`);
       return true;
     } catch (error) {
       console.error('Error saving chat:', error);
@@ -54,24 +59,36 @@ class ChatStorage {
 
 
   async loadChat(chatId) {
+    const paths = this._getPaths();
+    const chatsDir = paths.chats;
+    if (!chatsDir) {
+        console.error("Chats directory path not configured.");
+        return null;
+    }
+    const filePath = path.join(chatsDir, `${chatId}.json`);
     try {
-      const data = await fs.readFile(
-        path.join(CHATS_DIR, `${chatId}.json`),
-        'utf8'
-      );
+      const data = await fs.readFile(filePath, 'utf8');
       return JSON.parse(data);
     } catch (error) {
-      console.error('Error loading chat:', error);
+      if (error.code !== 'ENOENT') { // Log error only if it's not "file not found"
+        console.error(`Error loading chat ${chatId} from ${filePath}:`, error);
+      }
       return null;
     }
   }
 
-  // Moved: New function specifically for updating title/flag after generation
-  async updateChatTitle(chatId, title, history, model) {
-    await this.ensureChatsDirectory();
+  // Updated function signature to include personalityId
+  async updateChatTitle(chatId, title, history, model, personalityId) { // Add personalityId parameter
+    const paths = this._getPaths();
+    const chatsDir = paths.chats;
+    if (!chatsDir) throw new Error("Chats directory path not configured.");
+
+    await this._ensureDirectoryExists(chatsDir); // Ensure directory exists
+
     const chatData = {
       id: chatId,
       model, // Need model here too
+      personalityId, // Save personality ID on title update too
       history, // Need history here too
       lastUpdated: Date.now(), // Update timestamp
       title: title,
@@ -79,24 +96,34 @@ class ChatStorage {
     };
      try {
       await fs.writeFile(
-        path.join(CHATS_DIR, `${chatId}.json`),
-        JSON.stringify(chatData)
+        path.join(chatsDir, `${chatId}.json`),
+        JSON.stringify(chatData, null, 2) // Add formatting
       );
       return true;
     } catch (error) {
-      console.error('Error updating chat title:', error);
+      console.error(`Error updating chat title for ${chatId}:`, error);
       return false;
     }
   }
 
   async listChats() {
+    const paths = this._getPaths();
+    const chatsDir = paths.chats;
+    if (!chatsDir) {
+        console.error("Chats directory path not configured.");
+        return [];
+    }
+
     try {
-      const files = await fs.readdir(CHATS_DIR);
+      await this._ensureDirectoryExists(chatsDir); // Ensure dir exists before reading
+      const files = await fs.readdir(chatsDir);
       const chats = await Promise.all(
         files
           .filter(file => file.endsWith('.json'))
           .map(async file => {
             const data = await this.loadChat(file.replace('.json', ''));
+            // Handle case where loadChat returns null (e.g., file deleted between readdir and load)
+            if (!data) return null;
             return {
               id: data.id,
               title: data.title, // This will now be the potentially AI-generated title
@@ -104,14 +131,15 @@ class ChatStorage {
             };
           })
       );
-      return chats.sort((a, b) => b.lastUpdated - a.lastUpdated);
+      // Filter out null entries and sort
+      return chats.filter(chat => chat !== null).sort((a, b) => b.lastUpdated - a.lastUpdated);
     } catch (error) {
-      console.error('Error listing chats:', error);
-      return [];
+      console.error('Error loading chat:', error);
+      return null;
     }
   }
 
-
+  // Renamed to avoid confusion with AI generation
 
   // Renamed to avoid confusion with AI generation
   generateDefaultTitle(history) {
@@ -122,8 +150,16 @@ class ChatStorage {
 
   // Moved: Function to back up the current chat state before editing
   async backupChatVersion(chatId) {
-    await this.ensureVersionsDirectory(); // Make sure backup dir exists
-    const sourcePath = path.join(CHATS_DIR, `${chatId}.json`);
+    const paths = this._getPaths();
+    const chatsDir = paths.chats;
+    const versionsDir = paths.chatVersions; // Use configured versions path
+    if (!chatsDir || !versionsDir) {
+        throw new Error("Chats or chat versions directory path not configured.");
+    }
+
+    await this._ensureDirectoryExists(versionsDir); // Make sure backup dir exists
+
+    const sourcePath = path.join(chatsDir, `${chatId}.json`);
     try {
       // Check if source file exists
       await fs.access(sourcePath);
@@ -132,7 +168,7 @@ class ChatStorage {
       let version = 1;
       let destinationPath;
       do {
-        destinationPath = path.join(VERSIONS_DIR, `${chatId}-v${version}.json`);
+        destinationPath = path.join(versionsDir, `${chatId}-v${version}.json`);
         try {
           await fs.access(destinationPath);
           version++; // File exists, try next version
@@ -151,7 +187,13 @@ class ChatStorage {
   }
 
   async deleteChat(chatId) {
-    const filePath = path.join(CHATS_DIR, `${chatId}.json`);
+    const paths = this._getPaths();
+    const chatsDir = paths.chats;
+    if (!chatsDir) {
+        console.error("Chats directory path not configured. Cannot delete chat.");
+        return false;
+    }
+    const filePath = path.join(chatsDir, `${chatId}.json`);
     try {
       await fs.unlink(filePath);
       console.log(`Deleted chat file: ${filePath}`);

@@ -7,8 +7,16 @@
   <link href="css/output.css" rel="stylesheet">
   <link href="css/themes.css" rel="stylesheet">
   <link href="css/animations.css" rel="stylesheet">
+  <!-- Personality Selector CSS -->
+  <link href="components/personalitySelector.css" rel="stylesheet">
+  <!-- Swiper CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/swiper/swiper-bundle.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <!-- particles.js -->
+  <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+  <!-- Swiper JS -->
+  <script src="https://unpkg.com/swiper/swiper-bundle.min.js"></script>
 </head>
 <body class="bg-[var(--background-color)] text-[var(--foreground-color)]">
   <div class="flex flex-col h-screen">
@@ -48,9 +56,17 @@
       </div>
       <div class="flex items-center space-x-4">
         <!-- Token Counter Display -->
+<!-- Active Personality Display -->
+        <div id="active-personality-display" class="text-sm opacity-90 mr-4"> <!-- Added mr-4 for spacing -->
+          Personality: <span id="active-personality-name" class="font-semibold">Loading...</span>
+        </div>
         <div id="tokenCounterDisplay" class="text-sm opacity-90">
           Today's Tokens: Loading...
         </div>
+        <!-- Personality Selector Trigger Button -->
+        <button id="openPersonalitySelectorBtn" class="btn-header-icon" aria-label="Select Personality">
+          <i class="fas fa-user-astronaut"></i> <!-- Example Icon -->
+        </button>
         <!-- Settings Button -->
         <button id="settingsBtn" class="btn-header-icon" aria-label="Settings">
           <i class="fas fa-cog"></i>
@@ -113,32 +129,131 @@
   </div>
 
   <!-- Settings Modal -->
-  <div id="settingsModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 hidden p-4">
-      <div class="modal-content max-w-md w-full"> <!-- Use modal component class -->
-          <button id="closeSettingsBtn" class="modal-close-button" aria-label="Close settings"> <!-- Use modal component class -->
-              <i class="fas fa-times fa-lg"></i>
-          </button>
-          <h2 class="text-xl font-semibold mb-6">Settings</h2>
-          <div class="space-y-5">
-              <div>
-                  <label for="themeSelector" class="block text-sm font-medium mb-1">Color Theme</label>
-                  <select id="themeSelector" class="select-base focus:ring-1"> <!-- Use select component class, override focus ring -->
-                      <option value="default">Default</option>
-                      <option value="light">Light</option>
-                      <option value="dark">Dark</option>
-                  </select>
-              </div>
-              <!-- Add other settings here later -->
+  <!-- Settings Modal: Uses new CSS classes for structure and state -->
+  <div id="settingsModal"> <!-- Base container, controlled by CSS -->
+      <div class="modal-content"> <!-- Flex container from CSS -->
+
+          <!-- Modal Header -->
+          <div class="modal-header">
+              <h2 id="settingsModalTitle" class="modal-title">Settings</h2>
+              <button id="closeSettingsBtn" class="modal-close-button" aria-label="Close settings">
+                  <i class="fas fa-times"></i> <!-- Smaller icon if needed -->
+              </button>
           </div>
+
+          <!-- Modal Body (Scrollable) -->
+          <div class="modal-body">
+
+              <!-- General Settings Section -->
+              <div class="settings-section">
+                  <h3>General</h3>
+                  <div class="form-group">
+                      <label for="themeSelector">Color Theme</label>
+                      <select id="themeSelector" class="select-base"> <!-- Use base class -->
+                          <option value="default">Default</option>
+                          <option value="light">Light</option>
+                          <option value="dark">Dark</option>
+                      </select>
+                  </div>
+              </div>
+
+              <!-- API Keys Section -->
+              <div class="settings-section">
+                  <h3>API Keys</h3>
+                  <div class="form-group">
+                      <label for="openaiApiKeyInput">OpenAI API Key</label>
+                      <div class="flex items-center space-x-2">
+                          <input type="password" id="openaiApiKeyInput" class="input-base flex-grow" placeholder="Enter your OpenAI key">
+                          <button id="saveOpenaiApiKeyBtn" class="btn btn-secondary py-1.5 px-3 text-sm">Save</button> <!-- Consider btn-primary -->
+                      </div>
+                  </div>
+                  <div class="form-group">
+                      <label for="geminiApiKeyInput">Gemini API Key</label>
+                      <div class="flex items-center space-x-2">
+                          <input type="password" id="geminiApiKeyInput" class="input-base flex-grow" placeholder="Enter your Gemini key">
+                          <button id="saveGeminiApiKeyBtn" class="btn btn-secondary py-1.5 px-3 text-sm">Save</button> <!-- Consider btn-primary -->
+                      </div>
+                  </div>
+              </div>
+
+              <!-- Personality Settings Section -->
+              <div class="settings-section">
+                  <h3>Personality Details</h3>
+                  <div class="form-group">
+                      <label id="personalitySelectorLabel" for="personalitySelectorContainer">Configure Personality</label>
+                      <div id="personalitySelectorContainer" class="relative">
+                          <!-- Custom dropdown will be initialized here by customDropdown.js -->
+                          <select id="personalitySelector" class="hidden"></select> <!-- Hidden select stores value -->
+                          <!-- Button and dropdown panel created by JS -->
+                      </div>
+                  </div>
+
+                  <!-- Personality Details Sub-section (Initially Hidden) -->
+                  <div id="personalityDetailsContainer" class="hidden space-y-4 mt-4 p-4 border border-[var(--border-color-soft)] rounded-lg bg-[var(--content-bg-color-alt)]">
+                       <div class="form-group">
+                           <label>Description</label>
+                           <p id="personalityDescription" class="text-sm text-[var(--foreground-color-muted)] italic bg-[var(--input-bg-color)] p-2 rounded border border-[var(--input-border-color)] min-h-[40px]"></p>
+                       </div>
+                       <div class="form-group">
+                          <label>Default Context Sets</label>
+                          <div id="contextSetsContainer" class="space-y-2 max-h-32 overflow-y-auto custom-scrollbar border border-[var(--border-color-soft)] p-3 rounded bg-[var(--input-bg-color)]">
+                              <!-- Checkboxes populated by JS using .checkbox-group -->
+                          </div>
+                      </div>
+                      <div id="customInstructionsContainer" class="hidden form-group">
+                          <label for="customInstructionsTextarea">Custom Instructions Override</label>
+                          <textarea id="customInstructionsTextarea" class="textarea-base" rows="4" placeholder="Enter custom instructions for this personality..."></textarea>
+                      </div>
+                      <button id="savePersonalitySettingsBtn" class="btn btn-primary w-full mt-3 text-sm py-2" disabled>Save Personality Settings</button>
+                  </div>
+              </div>
+
+          </div> <!-- End Modal Body -->
+
+          <!-- Modal Footer -->
+          <div class="modal-footer">
+              <!-- Could add other buttons here if needed, e.g., a general "Close" -->
+              <button type="button" class="btn btn-secondary" onclick="document.getElementById('settingsModal').classList.remove('open')">Close</button>
+              <!-- Maybe move save buttons here? Or keep them contextual -->
+          </div>
+
+      </div> <!-- End Modal Content -->
+  </div> <!-- End Settings Modal -->
+
+  <!-- Personality Selector Component HTML (Initially Hidden) -->
+  <!-- Placeholder for Personality Selector HTML -->
+  <div id="personality-selector-overlay" class="personality-selector-overlay hidden">
+    <div class="personality-selector-background"></div>
+    <div class="personality-selector-container">
+      <h2>Select Personality</h2>
+      <!-- Carousel will go here -->
+      <div id="personality-carousel" class="swiper-container">
+          <div class="swiper-wrapper">
+              <!-- Personality cards will be injected here by JS -->
+          </div>
+          <!-- Add Pagination -->
+          <div class="swiper-pagination"></div>
+          <!-- Add Navigation -->
+          <div class="swiper-button-next"></div>
+          <div class="swiper-button-prev"></div>
       </div>
+      <button id="close-personality-selector">Close</button>
+      <!-- Particle canvas (optional, depending on library) -->
+      <div id="particles-js"></div>
+    </div>
   </div>
 
-  <script src="app.js"></script>
-  <script src="chatHistory.js"></script>
+  <!-- Component Scripts -->
+  <script type="module" src="components/personalitySelector.js"></script> <!-- Load as module -->
   <script src="components/autoResizeInput.js"></script>
   <script src="components/loadingIndicator.js"></script>
-  <script src="components/settingsModal.js"></script>
-  <script src="components/customDropdown.js"></script> <!-- Add custom dropdown script -->
+  <script src="components/customDropdown.js"></script> <!-- Define initializeCustomDropdown first -->
+  <script src="components/settingsModal.js"></script> <!-- Then load the script that uses it -->
+
+  <!-- Main App Script (Load Last) -->
+  <script type="module" src="app.js"></script> <!-- Load as module -->
+  <script src="chatHistory.js"></script> <!-- Assuming this doesn't need module context -->
+
   <!-- Add class for custom scrollbars -->
   <style>
     .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }

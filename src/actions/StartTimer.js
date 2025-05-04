@@ -16,6 +16,24 @@ class StartTimer extends ActionBase {
       }, duration * 1000);
     });
   }
+
+  /**
+   * @override
+   * @returns {{name: string, description: string, parameters: object}}
+   */
+  static getSchema() {
+    return {
+      name: 'start_timer',
+      description: 'Starts a countdown timer for a specified duration in seconds.',
+      parameters: {
+        type: 'object',
+        properties: {
+          duration: { type: 'number', description: 'Timer duration in seconds.' }
+        },
+        required: ['duration']
+      }
+    };
+  }
 }
 
 module.exports = StartTimer;

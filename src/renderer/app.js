@@ -1,4 +1,6 @@
-// app.js - Frontend logic with a model selector for sending messages
+// app.js - Frontend logic with model and personality selectors
+// Import the personality selector component
+import { personalitySelector } from './components/personalitySelector.js';
 
 document.addEventListener('DOMContentLoaded', async () => { // Make listener async
   const chatWindow = document.getElementById('chatWindow');
@@ -6,6 +8,14 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
   const sendBtn = document.getElementById('sendBtn');
   const modelSelector = document.getElementById('modelSelector'); // New selector for models
   const tokenCounterDisplay = document.getElementById('tokenCounterDisplay'); // Get token counter element
+  const openPersonalitySelectorBtn = document.getElementById('openPersonalitySelectorBtn'); // Get personality selector trigger button
+  const personalityNameElement = document.getElementById('active-personality-name'); // Get personality name display element
+
+  // --- Personality State ---
+  let availablePersonalities = [];
+  let currentDefaultPersonalityId = null; // ID of the personality used for NEW chats
+  let currentActivePersonalityName = 'Loading...'; // Name of the currently displayed personality
+  // --- End Personality State ---
 
   // Initial chat loading/starting is now handled by chatHistory.js
 
@@ -31,6 +41,114 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
   }
 
   // --- End Token Counter Logic ---
+
+  // --- Personality Management ---
+  async function fetchPersonalities() {
+    try {
+      console.log("[App] Fetching personalities...");
+      const result = await window.electronAPI.invoke('get-personalities');
+      if (result && !result.error) {
+        availablePersonalities = result.personalities || [];
+        currentDefaultPersonalityId = result.currentPersonalityId;
+        console.log(`[App] Fetched ${availablePersonalities.length} personalities. Default ID: ${currentDefaultPersonalityId}`);
+
+        // Find and display the default personality name initially
+        const defaultPersonality = availablePersonalities.find(p => p.id === currentDefaultPersonalityId);
+        if (defaultPersonality) {
+          updateActivePersonalityDisplay(defaultPersonality.name);
+        } else {
+          console.warn(`[App] Default personality ID ${currentDefaultPersonalityId} not found in fetched list.`);
+          updateActivePersonalityDisplay('Unknown'); // Fallback display
+        }
+
+        // Notify settings modal if it's loaded and has an update function
+        if (window.updatePersonalityDropdown) {
+          window.updatePersonalityDropdown(availablePersonalities, currentDefaultPersonalityId);
+        }
+      } else {
+        console.error("[App] Error fetching personalities:", result?.error || "Unknown error");
+        availablePersonalities = []; // Reset on error
+        currentDefaultPersonalityId = null;
+        updateActivePersonalityDisplay('Error'); // Update display on error
+      }
+    } catch (error) {
+      console.error("[App] Exception fetching personalities:", error);
+      availablePersonalities = [];
+      currentDefaultPersonalityId = null;
+    }
+  }
+
+  async function handlePersonalityChange(selectedId) {
+    try {
+      console.log(`[App] Setting default personality to: ${selectedId}`);
+      const result = await window.electronAPI.invoke('set-active-personality', selectedId);
+      if (result && result.success) {
+        currentDefaultPersonalityId = selectedId; // Update local state on success
+        console.log(`[App] Default personality successfully updated to ${selectedId}`);
+        // Optionally provide user feedback (e.g., toast notification)
+      } else {
+        console.error("[App] Failed to set default personality:", result?.error || "Unknown error");
+        // Revert dropdown in UI? Show error message?
+        // For now, just log the error. The dropdown might visually mismatch the actual backend state.
+        alert(`Failed to set personality: ${result?.error || 'Unknown error'}`);
+        // Re-fetch to ensure UI consistency after failure? Or rely on user refreshing settings.
+        if (window.updatePersonalityDropdown) {
+             window.updatePersonalityDropdown(availablePersonalities, currentDefaultPersonalityId); // Revert UI
+        }
+      }
+    } catch (error) {
+      console.error("[App] Exception setting personality:", error);
+      alert(`Error setting personality: ${error.message}`);
+       if (window.updatePersonalityDropdown) {
+           window.updatePersonalityDropdown(availablePersonalities, currentDefaultPersonalityId); // Revert UI
+       }
+    }
+  }
+
+  // Expose personality data and handler for settings modal
+  window.getAvailablePersonalities = () => availablePersonalities;
+  window.getCurrentDefaultPersonalityId = () => currentDefaultPersonalityId;
+  window.handleAppPersonalityChange = handlePersonalityChange;
+  // --- End Personality Management ---
+
+  // --- Active Personality Display Update ---
+  function updateActivePersonalityDisplay(newName) {
+    if (personalityNameElement) {
+      currentActivePersonalityName = newName || 'Unknown'; // Update state variable
+      personalityNameElement.textContent = currentActivePersonalityName; // Update display element
+      console.log(`[App] Active personality display updated to: ${currentActivePersonalityName}`);
+    } else {
+      console.error("[App] Cannot update personality display: element 'active-personality-name' not found.");
+    }
+  }
+  // --- End Active Personality Display Update ---
+
+  // --- Current Chat Personality Selection ---
+  async function handleCurrentChatPersonalitySelect(selectedId) {
+    try {
+      console.log(`[App] Setting current chat personality to: ${selectedId}`);
+      // Send IPC message to main process to handle the temporary switch
+      const result = await window.electronAPI.invoke('set-current-chat-personality', selectedId);
+      if (result && result.success) {
+        console.log(`[App] Current chat personality successfully set to ${selectedId}`);
+        // Update the header display with the newly selected personality's name
+        const selectedPersonality = availablePersonalities.find(p => p.id === selectedId);
+        if (selectedPersonality) {
+          updateActivePersonalityDisplay(selectedPersonality.name);
+        } else {
+          console.warn(`[App] Selected personality ID ${selectedId} not found after successful IPC call.`);
+          updateActivePersonalityDisplay('Unknown'); // Fallback if name not found
+        }
+      } else {
+        console.error("[App] Failed to set current chat personality:", result?.error || "Unknown error");
+        alert(`Failed to switch personality for this chat: ${result?.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error("[App] Exception setting current chat personality:", error);
+      alert(`Error switching personality: ${error.message}`);
+    }
+  }
+  // --- End Current Chat Personality Selection ---
 
   // Expose a function to reset the counter when a chat is loaded
   window.resetAppMessageCounter = (historyLength) => {
@@ -419,4 +537,19 @@ try {
   updateTokenDisplay(null); // Show N/A on error
 }
 window.electronAPI.onMessage('token-usage-updated', updateTokenDisplay); // Listen for updates
+
+// --- Fetch Personalities on Load ---
+await fetchPersonalities(); // Fetch personalities after DOM is ready
+
+  // --- Initialize Personality Selector ---
+  if (personalitySelector && openPersonalitySelectorBtn) {
+    personalitySelector.init(handleCurrentChatPersonalitySelect); // Initialize with the callback
+    openPersonalitySelectorBtn.addEventListener('click', () => {
+      personalitySelector.show(); // Show the selector on button click
+    });
+  } else {
+    console.error("Failed to initialize personality selector: Component or button not found.");
+  }
+  // --- End Personality Selector Init ---
+
 });

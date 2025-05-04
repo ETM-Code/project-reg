@@ -98,3 +98,149 @@ body {
       @apply absolute top-3 right-3 text-[var(--foreground-color)] opacity-60 hover:opacity-100 hover:text-[var(--foreground-color)] p-1 transition-colors;
   }
 }
+/* ======================================== */
+/* Settings Modal Specific Styles           */
+/* ======================================== */
+
+#settingsModal {
+  @apply fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50; /* Overlay, center content */
+  /* Add transition for smoother appearance */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+}
+
+#settingsModal.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+#settingsModal .modal-content {
+  @apply flex flex-col max-w-3xl w-full max-h-[90vh] overflow-hidden; /* Flex column, size limits */
+}
+
+#settingsModal .modal-header {
+    @apply p-4 border-b border-[var(--border-color-soft)] flex justify-between items-center flex-shrink-0; /* Header styling */
+    /* Use theme variable for header background if available, else fallback */
+    background-color: var(--header-bg-color, var(--content-bg-color));
+}
+
+#settingsModal .modal-title {
+    @apply text-lg font-semibold text-[var(--header-text-color)];
+}
+
+#settingsModal .modal-body {
+  @apply p-6 overflow-y-auto flex-grow; /* Scrollable body */
+  /* Improve scrollbar appearance (optional, browser-specific) */
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: var(--border-color-soft) transparent; /* Firefox */
+}
+#settingsModal .modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+#settingsModal .modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+#settingsModal .modal-body::-webkit-scrollbar-thumb {
+  background-color: var(--border-color-soft);
+  border-radius: 4px;
+}
+#settingsModal .modal-body::-webkit-scrollbar-thumb:hover {
+  background-color: var(--border-color); /* Slightly darker on hover */
+}
+
+
+#settingsModal .settings-section {
+  @apply mb-6 pb-6 border-b border-[var(--border-color-soft)]; /* Spacing and separator */
+}
+#settingsModal .settings-section:last-child {
+    @apply mb-0 pb-0 border-b-0; /* Remove border/margin for last section */
+}
+
+#settingsModal .settings-section h3 {
+  @apply text-md font-semibold mb-4 text-[var(--foreground-color-muted)]; /* Section titles */
+}
+
+#settingsModal .form-group {
+    @apply mb-4; /* Spacing between form elements */
+}
+
+#settingsModal label {
+    @apply block text-sm font-medium mb-1 text-[var(--foreground-color)];
+}
+
+/* Ensure inputs and selects use base styles but allow overrides */
+#settingsModal input[type="text"],
+#settingsModal input[type="password"],
+#settingsModal input[type="number"],
+#settingsModal select,
+#settingsModal textarea {
+    @apply input-base; /* Use the defined base input style */
+}
+
+#settingsModal select {
+    @apply select-base; /* Use the defined base select style */
+}
+
+#settingsModal textarea {
+    @apply textarea-base min-h-[80px]; /* Ensure textarea has reasonable min height */
+    /* Override padding if send button isn't relevant here */
+    padding-right: 0.5rem;
+}
+
+/* Checkbox styling */
+#settingsModal .checkbox-group {
+    @apply flex items-center space-x-2;
+}
+#settingsModal input[type="checkbox"] {
+    @apply h-4 w-4 rounded border-[var(--input-border-color)] text-[var(--primary-color)] focus:ring-[var(--primary-color)] focus:ring-offset-0 cursor-pointer;
+    background-color: var(--input-bg-color); /* Ensure bg matches theme */
+}
+#settingsModal .checkbox-group label {
+    @apply mb-0 font-normal; /* Adjust label style next to checkbox */
+}
+
+
+#settingsModal .modal-footer {
+  @apply p-4 border-t border-[var(--border-color-soft] flex justify-end space-x-3 flex-shrink-0; /* Footer styling */
+   background-color: var(--content-bg-color); /* Match body bg */
+}
+
+/* Responsiveness */
+@media (max-width: 768px) {
+  #settingsModal .modal-content {
+    max-width: 95%; /* Allow modal to take more width on smaller screens */
+    max-height: 95vh;
+  }
+
+  #settingsModal .modal-body {
+    padding: 1rem; /* Reduce padding on smaller screens */
+  }
+
+   #settingsModal .settings-section h3 {
+       @apply text-base mb-3;
+   }
+
+  #settingsModal .modal-footer {
+    padding: 0.75rem;
+    justify-content: space-between; /* Stack buttons or spread them */
+  }
+   #settingsModal .modal-footer .btn {
+       @apply px-3 py-1.5 text-sm; /* Slightly smaller buttons */
+   }
+}
+
+@media (max-width: 480px) {
+    #settingsModal .modal-header {
+        padding: 0.75rem;
+    }
+    #settingsModal .modal-title {
+        @apply text-base;
+    }
+     #settingsModal .modal-close-button {
+         @apply top-2 right-2; /* Adjust close button position */
+     }
+
+    /* Consider stacking form groups if needed */
+    /* #settingsModal .form-group { ... } */
+}

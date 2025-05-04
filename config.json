@@ -1,0 +1,166 @@
+{
+  "paths": {
+    "chats": "data/chats",
+    "chatVersions": "data/chats/versions",
+    "tokenUsage": "data/token_usage",
+    "promptsDir": "src/prompt",
+    "contextDir": "src/context",
+    "notesFile": "data/notes.txt",
+    "archivedNotesFile": "data/archivedNotes.json",
+    "eventsFile": "data/events.json",
+    "finishedEventsFile": "data/finishedEvents.json",
+    "monthlyCreditsFile": "data/monthlyCredits.json"
+  },
+  "apiKeys": {
+    "gemini": "AIzaSyDGIsTiIwtBWD3k7NNn3gwu5mOx-OjXnc0",
+    "openai": "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"
+  },
+  "defaults": {
+    "personalityId": "reg-lifecoach",
+    "modelImplementation": "gpt",
+    "modelName": "gpt-4o-mini"
+  },
+  "prompts": [
+    {
+      "id": "life-coach",
+      "name": "Life Coach",
+      "path": "src/prompt/lifeCoachPrompt.md"
+    },
+    {
+      "id": "regLifecoachPrompt",
+      "name": "Reg Life Coach",
+      "path": "src/prompt/regLifecoachPrompt.md"
+    }
+,
+    {
+      "id": "clarionRoleplayerPrompt",
+      "name": "Clarion Roleplayer",
+      "path": "src/prompt/clarionRoleplayerPrompt.md"
+    },
+    {
+      "id": "mitchellReviewerPrompt",
+      "name": "Mitchell Reviewer",
+      "path": "src/prompt/mitchellReviewerPrompt.md"
+    },
+    {
+      "id": "carlosBrainstormerPrompt",
+      "name": "Carlos Brainstormer",
+      "path": "src/prompt/carlosBrainstormerPrompt.md"
+    },
+    {
+      "id": "contextCreatorPrompt",
+      "name": "Context Creator",
+      "path": "src/prompt/contextCreatorPrompt.md"
+    },
+    {
+      "id": "contextAwarePrompt",
+      "name": "Context Aware",
+      "path": "src/prompt/contextAwarePrompt.md"
+    }
+  ],
+  "contextSets": [
+    {
+      "id": "my-context",
+      "name": "My Context",
+      "paths": ["src/context/myContext.md"]
+    },
+    {
+      "id": "notes-context",
+      "name": "Notes",
+      "paths": ["data/notes.txt"]
+    }
+  ],
+  "personalities": [
+    {
+      "id": "reg-lifecoach",
+      "name": "Reg",
+      "description": "Your supportive life coach.",
+      "promptId": "regLifecoachPrompt",
+      "availableContextSetIds": ["my-context", "notes-context"],
+      "defaultContextSetIds": ["my-context", "notes-context"],
+      "tools": ["MakeNote", "CreateEvent", "CheckEvents", "StartTimer"],
+      "modelImplementation": "gpt",
+      "modelName": "gpt-4o-mini",
+      "allowCustomInstructions": true,
+      "customInstructions": ""
+    },
+    {
+      "id": "default-gemini",
+      "name": "Default Gemini",
+      "description": "Default personality using Gemini.",
+      "promptId": "regLifecoachPrompt",
+      "availableContextSetIds": ["my-context", "notes-context"],
+      "defaultContextSetIds": ["my-context", "notes-context"],
+      "tools": ["MakeNote", "CreateEvent", "CheckEvents", "StartTimer"],
+      "modelImplementation": "gemini",
+      "modelName": "gemini-1.5-flash-latest",
+      "allowCustomInstructions": true,
+      "customInstructions": ""
+    },
+    {
+      "id": "clarion-roleplayer",
+      "name": "Clarion",
+      "description": "A versatile roleplaying partner.",
+      "promptId": "clarionRoleplayerPrompt",
+      "availableContextSetIds": ["my-context", "notes-context"],
+      "defaultContextSetIds": ["my-context", "notes-context"],
+      "tools": ["MakeNote", "CreateEvent", "CheckEvents", "StartTimer"],
+      "modelImplementation": "gpt",
+      "modelName": "gpt-4o-mini",
+      "allowCustomInstructions": true,
+      "customInstructions": ""
+    },
+    {
+      "id": "mitchell-reviewer",
+      "name": "Mitchell",
+      "description": "Provides critical reviews and feedback.",
+      "promptId": "mitchellReviewerPrompt",
+      "availableContextSetIds": ["my-context", "notes-context"],
+      "defaultContextSetIds": ["my-context", "notes-context"],
+      "tools": ["MakeNote", "CreateEvent", "CheckEvents", "StartTimer"],
+      "modelImplementation": "gpt",
+      "modelName": "gpt-4o-mini",
+      "allowCustomInstructions": true,
+      "customInstructions": ""
+    },
+    {
+      "id": "carlos-brainstormer",
+      "name": "Carlos",
+      "description": "Helps brainstorm ideas and solutions.",
+      "promptId": "carlosBrainstormerPrompt",
+      "availableContextSetIds": ["my-context", "notes-context"],
+      "defaultContextSetIds": ["notes-context"],
+      "tools": ["MakeNote", "CreateEvent", "CheckEvents", "StartTimer"],
+      "modelImplementation": "gpt",
+      "modelName": "gpt-4o-mini",
+      "allowCustomInstructions": true,
+      "customInstructions": ""
+    },
+    {
+      "id": "context-creator",
+      "name": "Context Creator",
+      "description": "Generates context based on input.",
+      "promptId": "contextCreatorPrompt",
+      "availableContextSetIds": ["my-context", "notes-context"],
+      "defaultContextSetIds": [],
+      "tools": [],
+      "modelImplementation": "gpt",
+      "modelName": "gpt-4o-mini",
+      "allowCustomInstructions": true,
+      "customInstructions": ""
+    },
+    {
+      "id": "context-aware",
+      "name": "Context-Aware",
+      "description": "Utilizes provided context effectively.",
+      "promptId": "contextAwarePrompt",
+      "availableContextSetIds": ["my-context", "notes-context"],
+      "defaultContextSetIds": ["my-context", "notes-context"],
+      "tools": ["MakeNote", "CreateEvent", "CheckEvents", "StartTimer"],
+      "modelImplementation": "gpt",
+      "modelName": "gpt-4o-mini",
+      "allowCustomInstructions": true,
+      "customInstructions": ""
+    }
+  ]
+}

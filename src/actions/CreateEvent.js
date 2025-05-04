@@ -38,6 +38,26 @@ class CreateEvent extends ActionBase {
 
     return newEvent;
   }
+
+  /**
+   * @override
+   * @returns {{name: string, description: string, parameters: object}}
+   */
+  static getSchema() {
+    return {
+      name: 'create_event', // Keep snake_case for API consistency
+      description: 'Creates a new event in Google Calendar with a specified date and title.',
+      parameters: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', description: 'Date of the event in YYYY-MM-DD format.' },
+          title: { type: 'string', description: 'Title or description of the event.' }
+          // Note: The execute method uses typeTag, importanceTag, reminder - schema needs update if these are AI-provided
+        },
+        required: ['date', 'title'] // Adjust required fields based on actual usage
+      }
+    };
+  }
 }
 
 module.exports = CreateEvent;

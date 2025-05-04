@@ -13,6 +13,16 @@ class ActionBase {
     async execute(params) {
       throw new Error("Execute method must be implemented by subclass.");
     }
+
+    /**
+     * Returns the schema definition for this action, used for AI tool/function calling.
+     * Must be implemented by subclasses as a static method.
+     * @returns {{name: string, description: string, parameters: object}}
+     */
+    static getSchema() {
+        // This static method should be overridden by concrete action subclasses
+        throw new Error("Static method 'getSchema()' must be implemented by subclasses.");
+    }
   }
   
   module.exports = ActionBase;

@@ -23,6 +23,24 @@ class MakeNote extends ActionBase {
     fs.appendFileSync(NOTES_FILE, `\n${note}`);
     return { status: 'Note added' };
   }
+
+  /**
+   * @override
+   * @returns {{name: string, description: string, parameters: object}}
+   */
+  static getSchema() {
+    return {
+      name: 'make_note',
+      description: 'Appends a note to the user notes log. This should be used whenever the user says something that even MIGHT be useful to remember later',
+      parameters: {
+        type: 'object',
+        properties: {
+          note: { type: 'string', description: 'The note text to add.' }
+        },
+        required: ['note']
+      }
+    };
+  }
 }
 
 function archiveNotes(notes) {

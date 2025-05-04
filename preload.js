@@ -15,17 +15,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const allowedReceiveChannels = [
           'streamPartialResponse',
           'streamFinalResponse',
-          'functionCallResponse', // Assuming this is still needed
+          'functionCallResponse',
           'chat-title-updated',
           'chat-deleted',
-          'token-usage-updated' // Assuming this is still needed
+          'token-usage-updated'
       ];
       if (allowedReceiveChannels.includes(channel)) {
           // Ensure the listener function is correctly passed
           const listener = (event, ...args) => func(...args);
           ipcRenderer.on(channel, listener);
-          // Optional: Return a function to remove the listener
-          // return () => ipcRenderer.removeListener(channel, listener);
+          // Return a function to remove the listener for cleanup
+          return () => ipcRenderer.removeListener(channel, listener);
       } else {
            console.error(`Attempted to listen on unallowed channel: ${channel}`);
       }
@@ -35,9 +35,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
           'list-chats',
           'start-new-chat',
           'load-chat',
-          // 'edit-message', // Removed from invoke
           'get-current-chat-id',
-          'get-initial-token-usage'
+          'get-initial-token-usage',
+          // Settings Modal & Personality Channels
+          'get-api-keys',
+          'save-api-key',
+          'get-personalities',
+          'set-active-personality',
+          'set-current-chat-personality',
+          'get-personality-details',
+          'save-personality-settings'
       ];
        if (allowedInvokeChannels.includes(channel)) {
            return ipcRenderer.invoke(channel, data);

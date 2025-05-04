@@ -23,6 +23,28 @@ class CheckEvents extends ActionBase {
     // Limit result to 100 events
     return events.slice(0, 100);
   }
+
+  /**
+   * @override
+   * @returns {{name: string, description: string, parameters: object}}
+   */
+  static getSchema() {
+    return {
+      name: 'check_events',
+      description: 'Searches for events based on given criteria.',
+      parameters: {
+        type: 'object',
+        properties: {
+          // Note: The execute method iterates over keys in criteria.
+          // The schema should reflect the *expected* criteria fields for the AI.
+          // Let's assume 'criteria' is a general search string for simplicity,
+          // matching the original schema. Refine if specific fields are needed.
+          criteria: { type: 'string', description: 'Search criteria such as date, type, or tag.' }
+        },
+        required: ['criteria']
+      }
+    };
+  }
 }
 
 module.exports = CheckEvents;

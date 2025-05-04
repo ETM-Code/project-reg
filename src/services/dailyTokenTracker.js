@@ -1,29 +1,42 @@
 // src/services/dailyTokenTracker.js
 const fs = require('fs').promises;
 const path = require('path');
+const settingsManager = require('../config/settingsManager'); // Import settingsManager
 
-const usageDir = path.join(__dirname, '..', '..', 'data', 'token_usage');
+// REMOVED: Hardcoded usageDir constant
+
 const getTodaysDateString = () => new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
-const ensureUsageDirExists = async () => {
+// Helper to get configured token usage path
+const _getTokenUsageDir = () => {
+    const paths = settingsManager.getPaths(); // Assumes settingsManager is initialized
+    if (!paths || !paths.tokenUsage) {
+        console.error("Token usage directory path not configured.");
+        // Fallback or throw error? For now, let's throw to make misconfiguration obvious.
+        throw new Error("Token usage directory path not configured in settings.");
+    }
+    return paths.tokenUsage;
+};
+
+// Helper to ensure the directory exists
+const _ensureUsageDirExists = async (dirPath) => {
     try {
-        await fs.access(usageDir);
+        await fs.mkdir(dirPath, { recursive: true });
     } catch (error) {
-        if (error.code === 'ENOENT') {
-            await fs.mkdir(usageDir, { recursive: true });
-        } else {
-            throw error;
-        }
+        console.error(`Error creating token usage directory ${dirPath}:`, error);
+        throw error; // Re-throw
     }
 };
 
-const getTodaysFilePath = () => {
+const _getTodaysFilePath = () => {
+    const usageDir = _getTokenUsageDir();
     return path.join(usageDir, `${getTodaysDateString()}.json`);
 };
 
 const readTodaysUsage = async () => {
-    await ensureUsageDirExists();
-    const filePath = getTodaysFilePath();
+    const usageDir = _getTokenUsageDir();
+    await _ensureUsageDirExists(usageDir); // Ensure directory exists before reading
+    const filePath = _getTodaysFilePath();
     try {
         const data = await fs.readFile(filePath, 'utf-8');
         const usage = JSON.parse(data);
@@ -49,9 +62,10 @@ const updateTodaysUsage = async (inputTokens, outputTokens) => {
         console.error('Invalid token counts provided for update:', inputTokens, outputTokens);
         return;
     }
-    await ensureUsageDirExists();
-    const filePath = getTodaysFilePath();
-    const currentUsage = await readTodaysUsage();
+    const usageDir = _getTokenUsageDir();
+    await _ensureUsageDirExists(usageDir); // Ensure directory exists before writing
+    const filePath = _getTodaysFilePath();
+    const currentUsage = await readTodaysUsage(); // readTodaysUsage now ensures dir exists
 
     currentUsage.input += inputTokens;
     currentUsage.output += outputTokens;
