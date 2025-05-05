@@ -1,7 +1,10 @@
 const { loadConfig } = require('./configLoader');
 const path = require('path');
 const fs = require('fs').promises; // Added for file writing
-const CONFIG_FILE_PATH = path.join(__dirname, '..', '..', 'config.json'); // Define config path
+const { app } = require('electron'); // Import app
+
+// Define config path relative to the app's root path
+const CONFIG_FILE_PATH = path.join(app.getAppPath(), 'config.json');
 
 let config = null;
 let initializationPromise = null;
@@ -40,11 +43,11 @@ function ensureInitialized() {
 
 function getPaths() {
   ensureInitialized();
-  // Resolve relative paths from config.json to be absolute based on project root
-  const projectRoot = path.join(__dirname, '..', '..'); 
+  // Resolve relative paths from config.json to be absolute based on the app's root path
+  const appRoot = app.getAppPath();
   const resolvedPaths = {};
   for (const key in config.paths) {
-    resolvedPaths[key] = path.resolve(projectRoot, config.paths[key]);
+    resolvedPaths[key] = path.resolve(appRoot, config.paths[key]);
   }
   return resolvedPaths;
 }
@@ -95,6 +98,25 @@ function getContextSetById(id) {
     return getContextSets().find(cs => cs.id === id);
 }
 
+/**
+ * Gets the list of available AI models from the configuration.
+ * @returns {Array<object>} An array of model configuration objects.
+ */
+function getAvailableModels() {
+    ensureInitialized();
+    return config.availableModels || [];
+}
+
+/**
+ * Gets a specific AI model's configuration by its ID.
+ * @param {string} modelId The ID of the model to retrieve.
+ * @returns {object | undefined} The model configuration object, or undefined if not found.
+ */
+function getModelById(modelId) {
+    ensureInitialized();
+    const models = getAvailableModels();
+    return models.find(m => m.id === modelId);
+}
 
 // --- Functions for Managing Settings (Placeholders) ---
 
@@ -218,6 +240,42 @@ async function savePersonalityOverrides(personalityId, updatedSettings) {
  }
 }
 
+/**
+ * Saves a specific global setting (like defaultModel or reasoningEffort) to config.json.
+ * @param {'defaultModel' | 'reasoningEffort'} key The setting key to update within the 'defaults' object.
+ * @param {string} value The new value for the setting.
+ * @returns {Promise<void>}
+ */
+async function saveGlobalSetting(key, value) {
+    ensureInitialized(); // Make sure config is loaded
+
+    console.log(`[SettingsManager] Attempting to save global setting: ${key} = ${value}`);
+
+    if (!config.defaults) {
+        // Initialize defaults object if it doesn't exist (shouldn't happen with current config.json)
+        config.defaults = { defaultModel: "", reasoningEffort: "medium" }; // Provide sensible defaults
+        console.warn("[SettingsManager] Initialized missing defaults object in config.");
+    }
+
+    if (key !== 'defaultModel' && key !== 'reasoningEffort') {
+        throw new Error(`Invalid global setting key specified: ${key}. Must be 'defaultModel' or 'reasoningEffort'.`);
+    }
+
+    // Update the key in the config object in memory
+    config.defaults[key] = value;
+
+    // Write the entire updated config object back to the file
+    try {
+        const configString = JSON.stringify(config, null, 2); // Pretty print JSON
+        await fs.writeFile(CONFIG_FILE_PATH, configString, 'utf8');
+        console.log(`[SettingsManager] Successfully wrote updated config to ${CONFIG_FILE_PATH} after saving setting ${key}.`);
+    } catch (error) {
+        console.error(`[SettingsManager] Error writing config file while saving setting ${key}: ${error}`);
+        // Consider reverting in-memory change? For now, let error propagate.
+        throw new Error(`Failed to save configuration changes for setting ${key}: ${error.message}`);
+    }
+}
+
 
 module.exports = {
  initializeSettings,
@@ -230,7 +288,10 @@ module.exports = {
   getPersonalityById,
   getPromptById,
   getContextSetById,
+  getAvailableModels, // Export new function
+  getModelById, // Export new function
  savePersonalityOverrides,
- saveApiKey, // Export the new function
+ saveApiKey,
+ saveGlobalSetting, // Export the new function
  // saveSettings, // Export when implemented
 };

@@ -131,33 +131,45 @@ function populateCarousel() {
         slide.classList.add('swiper-slide');
         slide.dataset.personalityId = p.id; // Store ID for selection
 
+        // Create a container for the icon and name
+        const headerDiv = document.createElement('div');
+        headerDiv.classList.add('personality-item-header');
+
+        // Create and add the icon image if available
+        if (p.icon) {
+            const iconImg = document.createElement('img');
+            // Adjust path: Remove 'src/renderer/' prefix assuming index.html is in src/renderer/
+            const relativePath = p.icon.startsWith('src/renderer/') ? p.icon.substring('src/renderer/'.length) : p.icon;
+            iconImg.src = relativePath;
+            iconImg.alt = `${p.name} icon`; // Add alt text for accessibility
+            iconImg.classList.add('personality-icon'); // Add class for styling
+            // Removed inline styles
+            headerDiv.appendChild(iconImg); // Append icon to header
+        }
+
         const nameDiv = document.createElement('div');
         nameDiv.classList.add('personality-name');
+        // Removed inline styles
         nameDiv.textContent = p.name;
-        // console.log(`  Processing personality: ID=${p.id}, Name=${p.name}`); // Debug log removed
+        headerDiv.appendChild(nameDiv); // Append name to header
 
         const descDiv = document.createElement('div');
         descDiv.classList.add('personality-description');
         descDiv.textContent = p.description;
-        // console.log(`    Description: ${p.description}`); // Debug log removed
 
-        slide.appendChild(nameDiv);
-        slide.appendChild(descDiv);
+        slide.appendChild(headerDiv); // Append header (icon + name)
+        slide.appendChild(descDiv); // Append description
 
         slide.addEventListener('click', () => handlePersonalitySelect(p.id));
 
-        // console.log('    Generated slide HTML:', slide.outerHTML); // Debug log removed
         carouselWrapper.appendChild(slide);
     });
 
     // Update Swiper after adding slides
-    // console.log('Before Swiper update/init'); // Debug log removed
     if (swiperInstance) {
         swiperInstance.update();
-        // console.log('After Swiper update'); // Debug log removed
     } else {
         initSwiper(); // Initialize if not already done
-        // console.log('After Swiper init'); // Debug log removed
     }
 }
 
@@ -167,7 +179,6 @@ async function loadPersonalities() {
         const result = await window.electronAPI.invoke('get-personalities');
         // Ensure result and result.personalities exist and is an array
         personalities = (result && Array.isArray(result.personalities)) ? result.personalities : [];
-        // console.log('Received personalities:', personalities); // Debug log removed
         populateCarousel();
     } catch (error) {
         console.error("Failed to load personalities:", error);

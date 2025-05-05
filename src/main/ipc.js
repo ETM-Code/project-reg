@@ -1,6 +1,9 @@
 const { ipcMain } = require('electron');
 const chatStorage = require('../services/chatStorage');
 const chatManager = require('../models/chatManager');
+const settingsManager = require('../config/settingsManager'); // Import settingsManager
+const dailyTokenTracker = require('../services/dailyTokenTracker'); // Added for token tracking
+const { countTokens } = require('../util/tokenCounter'); // Added for token counting
 
 function setupIpcHandlers(mainWindow) { // Accept mainWindow
     ipcMain.handle('list-chats', async () => {
@@ -37,21 +40,22 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
 
     // Handler for editing a message (changed to ipcMain.on for streaming)
     ipcMain.on('edit-message', async (event, { chatId, messageId, newContent }) => { // Use messageId
-        // Ensure the correct chat is loaded
-        if (chatManager.getCurrentChatId() !== chatId) {
-             if (!chatManager.getCurrentChatId() || chatManager.getCurrentChatId() !== chatId) {
-                console.warn(`[IPC Edit] Attempting to edit message in non-active chat ${chatId}. Current: ${chatManager.getCurrentChatId()}`);
-                // Send error back via webContents if possible
-                if (mainWindow) {
-                    mainWindow.webContents.send('streamFinalResponse', { text: `Error: Cannot edit message in a non-active chat.` });
-                }
-                return; // Stop processing
-            }
+        // Ensure the correct chat is loaded AND the ID is valid before proceeding
+        const currentChatIdFromManager = chatManager.getCurrentChatId();
+        if (!currentChatIdFromManager || typeof currentChatIdFromManager !== 'string') {
+            console.error(`[IPC Edit] Invalid or missing currentChatId ('${currentChatIdFromManager}') in chatManager when trying to edit.`);
+            if (mainWindow) mainWindow.webContents.send('streamError', { message: "Error: Chat session not fully initialized. Cannot edit message." });
+            return; // Stop processing
+        }
+        if (currentChatIdFromManager !== chatId) {
+            console.warn(`[IPC Edit] Attempting to edit message in non-active chat ${chatId}. Current: ${currentChatIdFromManager}`);
+            if (mainWindow) mainWindow.webContents.send('streamError', { message: `Error: Cannot edit message in a non-active chat.` });
+            return; // Stop processing
         }
 
         try {
             // Call the refactored chatManager function which returns a result object or an error object
-            const modelResult = await chatManager.editMessage(messageId, newContent); // Pass messageId
+            const modelResult = await chatManager.editMessage(messageId, newContent); // Pass messageId (chatId is implicitly the one checked above)
 
             // Check if the edit itself failed (e.g., messageId not found) or if model response failed
             if (modelResult && modelResult.error) {
@@ -317,6 +321,87 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
             return { success: false, error: error.message }; // Return error object
         }
     });
+
+    // Handler to get the configuration object (Corrected)
+    ipcMain.handle('get-config', async () => {
+        console.log('[IPC] Received request to get configuration.');
+        try {
+            // Retrieve specific configuration parts from settingsManager
+            const defaults = settingsManager.getDefaults();
+            const personalities = settingsManager.getPersonalities();
+            const availableModels = settingsManager.getAvailableModels();
+            const paths = settingsManager.getPaths();
+            const apiKeys = {
+                openai: settingsManager.getApiKey('openai') || "",
+                gemini: settingsManager.getApiKey('gemini') || ""
+            };
+
+            // Construct the config object to return
+            const config = {
+                defaults,
+                personalities,
+                availableModels,
+                paths,
+                apiKeys
+            };
+
+            console.log('[IPC] Returning constructed configuration data.');
+            return config; // Return the constructed object
+        } catch (error) {
+            console.error('[IPC] Error getting configuration:', error);
+            // Return null or an error object to the renderer
+            return { error: `Failed to get configuration: ${error.message}` };
+        }
+    });
+
+    // Handler to get global model settings
+    ipcMain.handle('get-settings', async () => {
+        console.log('[IPC] Received request to get global settings.');
+        try {
+            // Ensure settingsManager is initialized (though it should be by now)
+            await settingsManager.initializeSettings();
+
+            const availableModels = settingsManager.getAvailableModels();
+            const defaults = settingsManager.getDefaults();
+            const defaultModel = defaults.defaultModel || ''; // Provide default if missing
+            const reasoningEffort = defaults.reasoningEffort || 'medium'; // Provide default if missing
+
+            console.log(`[IPC] Returning settings: ${availableModels.length} models, default: ${defaultModel}, effort: ${reasoningEffort}`);
+            return {
+                availableModels: availableModels.map(m => ({ id: m.id, name: m.name || m.id })), // Return only id and name
+                defaultModel: defaultModel,
+                reasoningEffort: reasoningEffort
+            };
+        } catch (error) {
+            console.error('[IPC] Error getting global settings:', error);
+            return { error: error.message }; // Return error object
+        }
+    });
+
+    // Handler to save a specific global setting
+    ipcMain.handle('save-setting', async (_, { key, value }) => {
+        console.log(`[IPC] Received request to save setting: ${key} = ${value}`);
+        if (!key || (key !== 'defaultModel' && key !== 'reasoningEffort')) {
+            console.error(`[IPC] Invalid key specified for save-setting: ${key}`);
+            return { success: false, error: 'Invalid setting key specified.' };
+        }
+        if (typeof value !== 'string') {
+             console.error(`[IPC] Invalid value type provided for save-setting (key: ${key}): ${typeof value}`);
+             return { success: false, error: 'Invalid setting value format provided.' };
+        }
+
+        try {
+            // Ensure settingsManager is initialized
+            await settingsManager.initializeSettings();
+            await settingsManager.saveGlobalSetting(key, value);
+            console.log(`[IPC] Successfully saved setting: ${key} = ${value}`);
+            return { success: true };
+        } catch (error) {
+            console.error(`[IPC] Error saving setting ${key}:`, error);
+            return { success: false, error: error.message }; // Return error object
+        }
+    });
+
 }
 
 module.exports = { setupIpcHandlers };

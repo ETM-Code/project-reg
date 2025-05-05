@@ -6,31 +6,133 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
   const chatWindow = document.getElementById('chatWindow');
   const userInput = document.getElementById('userInput');
   const sendBtn = document.getElementById('sendBtn');
-  const modelSelector = document.getElementById('modelSelector'); // New selector for models
+  // We only need the hidden select here, custom dropdown elements are handled by its own script
+  // const modelSelector = document.getElementById('modelSelector'); // Will get inside populateModelSelector
   const tokenCounterDisplay = document.getElementById('tokenCounterDisplay'); // Get token counter element
   const openPersonalitySelectorBtn = document.getElementById('openPersonalitySelectorBtn'); // Get personality selector trigger button
   const personalityNameElement = document.getElementById('active-personality-name'); // Get personality name display element
 
-  // --- Personality State ---
+  // --- Dynamic Input Elements ---
+  const expandInputBtn = document.getElementById('expandInputBtn');
+  const inputOverlay = document.getElementById('inputOverlay');
+  const inputOverlayBackdrop = document.getElementById('inputOverlayBackdrop');
+  const expandedInputContainer = document.getElementById('expandedInputContainer');
+  const closeExpandedInputBtn = document.getElementById('closeExpandedInputBtn');
+  const expandedInputTarget = document.getElementById('expandedInputTarget');
+  const expandedUserInput = document.getElementById('expandedUserInput'); // New modal textarea
+  const expandedSendBtn = document.getElementById('expandedSendBtn'); // New modal send button
+  const chatInputArea = document.getElementById('chatInputArea'); // Original container for input + expand btn
+  // const inputWrapper = userInput.parentElement; // No longer moving the wrapper
+  // const originalInputParent = chatInputArea; // No longer moving the wrapper
+
+  // --- State ---
   let availablePersonalities = [];
   let currentDefaultPersonalityId = null; // ID of the personality used for NEW chats
   let currentActivePersonalityName = 'Loading...'; // Name of the currently displayed personality
-  // --- End Personality State ---
-
-  // Initial chat loading/starting is now handled by chatHistory.js
-
+  let config = null; // Store fetched config
   let messageIndexCounter = 0; // Counter for assigning indices to new user messages
-
-  // State for editing
   let isEditing = false;
-  let editingChatId = null; // Add chatId state for editing
-  let editingMessageId = null; // Changed from editingIndex
+  let editingChatId = null;
+  let editingMessageId = null;
   let editingOriginalText = null;
-  let editingContainerElement = null; // Store the container being edited
+  let editingContainerElement = null;
+  let typingBubble = null;
+  let loadingBubbleElement = null;
+  let isInputExpanded = false; // Track expanded state
+  // --- End State ---
+
+  // --- Fetch Config ---
+  async function fetchConfig() {
+    try {
+      console.log("[App] Fetching configuration...");
+      // Assume preload.js exposes 'get-config' which returns { availableModels: [...], defaults: { modelId: '...' } }
+      config = await window.electronAPI.invoke('get-config');
+      if (!config || config.error || !config.availableModels || !config.defaults) {
+        console.error("[App] Error fetching or invalid config structure:", config?.error || "Invalid data received");
+        config = null; // Reset on error
+        modelSelectorBtnText.textContent = 'Error Models'; // Update button text on error
+        if (modelSelector) modelSelector.disabled = true; // Disable selector on error
+      } else {
+        console.log("[App] Config fetched successfully.");
+        // Call directly, without setTimeout
+        populateModelSelector(config.availableModels, config.defaults.modelId);
+      }
+    } catch (error) {
+      console.error("[App] Exception fetching config:", error);
+      config = null;
+      // Attempt to disable the hidden select on error
+      const selectorElement = document.getElementById('modelSelector');
+      if (selectorElement) selectorElement.disabled = true;
+      // We don't directly control the button text anymore, customDropdown handles it
+    }
+  }
+
+  // --- Populate Model Selector (Hidden Select Only) ---
+  function populateModelSelector(availableModels, defaultModelId) {
+    const modelSelector = document.getElementById('modelSelector'); // Get the hidden select
+
+    if (!modelSelector) {
+      console.error("[App] Cannot populate model selector: Hidden select element '#modelSelector' not found.");
+      return;
+    }
+    if (!availableModels) {
+       console.error("[App] Cannot populate model selector: availableModels data is missing.");
+       modelSelector.disabled = true;
+       return;
+    }
+
+    // Clear existing options
+    modelSelector.innerHTML = '';
+    let foundDefault = false;
+
+    availableModels.forEach(model => {
+      // Validate model object structure
+      if (!model || typeof model.id !== 'string' || typeof model.name !== 'string') {
+          console.warn("[App] Skipping invalid model entry in config:", model);
+          return; // Skip this invalid entry
+      }
+
+      // Create option for hidden select
+      const option = document.createElement('option');
+      option.value = model.id;
+      option.textContent = model.name;
+      modelSelector.appendChild(option);
+
+      // Check if this is the default model
+      if (model.id === defaultModelId) {
+        option.selected = true;
+        foundDefault = true;
+      }
+    });
+
+    // If defaultModelId from config wasn't found, select the first available model as fallback
+    if (!foundDefault && availableModels.length > 0 && availableModels[0].id) {
+        console.warn(`[App] Default model ID "${defaultModelId}" not found in availableModels. Falling back to first model: "${availableModels[0].id}".`);
+        defaultModelId = availableModels[0].id;
+        // Ensure the corresponding option is marked selected
+        const firstOption = modelSelector.querySelector(`option[value="${defaultModelId}"]`);
+        if (firstOption) firstOption.selected = true;
+    } else if (availableModels.length === 0) {
+        console.warn("[App] No available models found in config.");
+        modelSelector.disabled = true; // Disable if no models
+    }
+
+    // Set the hidden select's value to the determined default (or first)
+    // This ensures the value is correct even if the default wasn't initially found
+    if (availableModels.length > 0) {
+        modelSelector.value = defaultModelId;
+        modelSelector.disabled = false;
+    }
+
+    console.log(`[App] Hidden model selector populated. Selected value: ${modelSelector.value}`);
+
+    // Trigger custom event to notify customDropdown.js to update
+    console.log("[App] Dispatching 'optionsUpdated' event on #modelSelector.");
+    modelSelector.dispatchEvent(new CustomEvent('optionsUpdated', { bubbles: true }));
+  }
 
   // --- Token Counter Logic ---
   function updateTokenDisplay(usageData) {
-    // Display total tokens
     if (tokenCounterDisplay && usageData && typeof usageData.total === 'number') {
       const total = usageData.total.toLocaleString();
       tokenCounterDisplay.textContent = `Today's Tokens: ${total}`;
@@ -39,8 +141,6 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
       console.warn("Received invalid token usage data or element not found:", usageData);
     }
   }
-
-  // --- End Token Counter Logic ---
 
   // --- Personality Management ---
   async function fetchPersonalities() {
@@ -51,30 +151,22 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
         availablePersonalities = result.personalities || [];
         currentDefaultPersonalityId = result.currentPersonalityId;
         console.log(`[App] Fetched ${availablePersonalities.length} personalities. Default ID: ${currentDefaultPersonalityId}`);
-
-        // Find and display the default personality name initially
         const defaultPersonality = availablePersonalities.find(p => p.id === currentDefaultPersonalityId);
-        if (defaultPersonality) {
-          updateActivePersonalityDisplay(defaultPersonality.name);
-        } else {
-          console.warn(`[App] Default personality ID ${currentDefaultPersonalityId} not found in fetched list.`);
-          updateActivePersonalityDisplay('Unknown'); // Fallback display
-        }
-
-        // Notify settings modal if it's loaded and has an update function
+        updateActivePersonalityDisplay(defaultPersonality ? defaultPersonality.name : 'Unknown');
         if (window.updatePersonalityDropdown) {
           window.updatePersonalityDropdown(availablePersonalities, currentDefaultPersonalityId);
         }
       } else {
         console.error("[App] Error fetching personalities:", result?.error || "Unknown error");
-        availablePersonalities = []; // Reset on error
+        availablePersonalities = [];
         currentDefaultPersonalityId = null;
-        updateActivePersonalityDisplay('Error'); // Update display on error
+        updateActivePersonalityDisplay('Error');
       }
     } catch (error) {
       console.error("[App] Exception fetching personalities:", error);
       availablePersonalities = [];
       currentDefaultPersonalityId = null;
+      updateActivePersonalityDisplay('Error');
     }
   }
 
@@ -83,15 +175,14 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
       console.log(`[App] Setting default personality to: ${selectedId}`);
       const result = await window.electronAPI.invoke('set-active-personality', selectedId);
       if (result && result.success) {
-        currentDefaultPersonalityId = selectedId; // Update local state on success
+        currentDefaultPersonalityId = selectedId;
         console.log(`[App] Default personality successfully updated to ${selectedId}`);
-        // Optionally provide user feedback (e.g., toast notification)
+        // Update header display immediately (optional, could wait for re-fetch)
+        const selectedPersonality = availablePersonalities.find(p => p.id === selectedId);
+         if (selectedPersonality) updateActivePersonalityDisplay(selectedPersonality.name);
       } else {
         console.error("[App] Failed to set default personality:", result?.error || "Unknown error");
-        // Revert dropdown in UI? Show error message?
-        // For now, just log the error. The dropdown might visually mismatch the actual backend state.
         alert(`Failed to set personality: ${result?.error || 'Unknown error'}`);
-        // Re-fetch to ensure UI consistency after failure? Or rely on user refreshing settings.
         if (window.updatePersonalityDropdown) {
              window.updatePersonalityDropdown(availablePersonalities, currentDefaultPersonalityId); // Revert UI
         }
@@ -105,40 +196,30 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
     }
   }
 
-  // Expose personality data and handler for settings modal
   window.getAvailablePersonalities = () => availablePersonalities;
   window.getCurrentDefaultPersonalityId = () => currentDefaultPersonalityId;
   window.handleAppPersonalityChange = handlePersonalityChange;
-  // --- End Personality Management ---
 
   // --- Active Personality Display Update ---
   function updateActivePersonalityDisplay(newName) {
     if (personalityNameElement) {
-      currentActivePersonalityName = newName || 'Unknown'; // Update state variable
-      personalityNameElement.textContent = currentActivePersonalityName; // Update display element
+      currentActivePersonalityName = newName || 'Unknown';
+      personalityNameElement.textContent = currentActivePersonalityName;
       console.log(`[App] Active personality display updated to: ${currentActivePersonalityName}`);
     } else {
       console.error("[App] Cannot update personality display: element 'active-personality-name' not found.");
     }
   }
-  // --- End Active Personality Display Update ---
 
   // --- Current Chat Personality Selection ---
   async function handleCurrentChatPersonalitySelect(selectedId) {
     try {
       console.log(`[App] Setting current chat personality to: ${selectedId}`);
-      // Send IPC message to main process to handle the temporary switch
       const result = await window.electronAPI.invoke('set-current-chat-personality', selectedId);
       if (result && result.success) {
         console.log(`[App] Current chat personality successfully set to ${selectedId}`);
-        // Update the header display with the newly selected personality's name
         const selectedPersonality = availablePersonalities.find(p => p.id === selectedId);
-        if (selectedPersonality) {
-          updateActivePersonalityDisplay(selectedPersonality.name);
-        } else {
-          console.warn(`[App] Selected personality ID ${selectedId} not found after successful IPC call.`);
-          updateActivePersonalityDisplay('Unknown'); // Fallback if name not found
-        }
+        updateActivePersonalityDisplay(selectedPersonality ? selectedPersonality.name : 'Unknown');
       } else {
         console.error("[App] Failed to set current chat personality:", result?.error || "Unknown error");
         alert(`Failed to switch personality for this chat: ${result?.error || 'Unknown error'}`);
@@ -148,177 +229,225 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
       alert(`Error switching personality: ${error.message}`);
     }
   }
-  // --- End Current Chat Personality Selection ---
 
-  // Expose a function to reset the counter when a chat is loaded
+  // Expose function to reset counter
   window.resetAppMessageCounter = (historyLength) => {
     console.log(`Resetting message index counter based on loaded history length: ${historyLength}`);
-    // Approximate user message count for next index. Still imperfect.
-    // A better approach would be to track the actual last user message index.
     messageIndexCounter = Math.ceil(historyLength / 2);
   };
 
-  // Handle SHIFT+ENTER for newline and ENTER (without Shift) to send
+  // --- Event Listeners ---
   userInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (isEditing) {
-        saveEdit(); // Save edit on Enter when editing
-      } else {
-        sendMessage(); // Send new message otherwise
-      }
+      handleSendOrSave();
+    }
+    // Close overlay on Escape key press (from original input)
+    if (e.key === 'Escape' && isInputExpanded) {
+        closeExpandedInput();
     }
   });
-  // sendBtn.addEventListener('click', sendMessage); // Replaced by handleSendOrSave
-  sendBtn.addEventListener('click', handleSendOrSave); // Use combined handler
+  sendBtn.addEventListener('click', handleSendOrSave);
 
-  // Combined handler for Send/Save Edit button
+  // Add listeners for the *expanded* input as well
+  if (expandedUserInput) {
+      expandedUserInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSendOrSave();
+          }
+          // Close overlay on Escape key press (from expanded input)
+          if (e.key === 'Escape' && isInputExpanded) {
+              closeExpandedInput();
+          }
+      });
+  } else {
+      console.error("Expanded user input element not found.");
+  }
+  if (expandedSendBtn) {
+      expandedSendBtn.addEventListener('click', handleSendOrSave);
+  } else {
+      console.error("Expanded send button element not found.");
+  }
+
+  // --- Message Handling ---
   function handleSendOrSave() {
-    if (isEditing) {
-      saveEdit();
-    } else {
-      sendMessage();
+    const sourceInput = isInputExpanded ? expandedUserInput : userInput;
+    const message = sourceInput.value.trim();
+
+    if (!message) return; // Don't do anything if message is empty
+
+    if (isEditing && !isInputExpanded) { // Only allow saving edits from the original input for now
+      saveEdit(message); // Pass message to saveEdit
+    } else if (!isEditing) {
+      sendMessage(message); // Pass message to sendMessage
+    } else if (isEditing && isInputExpanded) {
+        console.warn("Cannot save edits from expanded view. Please close the expanded view first.");
+        // Optionally provide user feedback here
+        return; // Prevent sending/closing
+    }
+
+    // Clear the input that was used
+    sourceInput.value = '';
+
+    // Close expanded view after sending/saving if it was open
+    if (isInputExpanded) {
+        closeExpandedInput();
     }
   }
 
-  function sendMessage() {
-    const message = userInput.value.trim();
-    if (!message) return;
-    userInput.value = '';
-    // Assign index before sending. NOTE: This index might not match history if loaded.
-    // A robust solution needs mapping or getting index from backend.
+  // Modified sendMessage to accept the message content
+  function sendMessage(message) {
+    // Message trimming and validation already happened in handleSendOrSave
+    if (!modelSelector || modelSelector.disabled) return; // Don't send if selector disabled
+
     const currentIndex = messageIndexCounter;
-    appendMessage('user', message, currentIndex);
-    messageIndexCounter++; // Increment for the next user message
- 
-    // Show loading indicator (sets state) and create inline bubble
+    appendMessage('user', message, currentIndex); // Pass index
+    messageIndexCounter++;
+
     if (window.showLoadingIndicator) {
         window.showLoadingIndicator();
-        createInlineLoadingBubble(); // Create the visual indicator
+        createInlineLoadingBubble();
     } else {
         console.warn("showLoadingIndicator function not found.");
     }
- 
-    // Read the selected model from the dropdown
-    const model = modelSelector.value;
-    // Send the message along with the selected model
+
+    const model = modelSelector.value; // Read selected model from the hidden select
+    console.log(`[App] Sending message with model: ${model}`);
     window.electronAPI.sendMessage('chatMessage', { message, model });
   }
 
-  // Create and append a message bubble to the chat window
-  function appendMessage(sender, text, index) { // Receive index
-    const bubbleElements = createBubble(sender, text, index); // Get elements
+  function appendMessage(sender, text, index) {
+    const bubbleElements = createBubble(sender, text, index);
     chatWindow.appendChild(bubbleElements.container);
-    chatWindow.scrollTop = chatWindow.scrollHeight;
-    // Incrementing counter is handled in sendMessage now
+    // Only scroll down if already near the bottom
+    if (isScrolledToBottom(chatWindow)) {
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
   }
 
-  // Factory function to create a message bubble element
-  // NOTE: This function creates bubbles for *new* messages.
-  // Edit buttons for these might need messageId added later if immediate editing is required.
-  // For now, editing relies on buttons added by chatHistory.js for loaded messages.
-  function createBubble(sender, text, messageId = null) { // Accept optional messageId
+  // --- Helper function to check scroll position ---
+  function isScrolledToBottom(element, threshold = 10) {
+      // Check if the scroll height is greater than the client height (i.e., is there actually a scrollbar?)
+      const hasScrollbar = element.scrollHeight > element.clientHeight;
+      if (!hasScrollbar) {
+          return true; // If no scrollbar, it's effectively "at the bottom"
+      }
+      // Check if scrolled within the threshold of the bottom
+      return element.scrollHeight - element.scrollTop <= element.clientHeight + threshold;
+  }
+  // --- End Helper ---
+
+
+  function createBubble(sender, text, messageId = null) {
     const bubble = document.createElement('div');
     const container = document.createElement('div');
-    container.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'} mb-2 relative group`; // Add relative/group
+    container.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'} mb-2 relative group`;
     if (messageId) {
-        container.dataset.messageId = messageId; // Store messageId if provided
+        container.dataset.messageId = messageId;
     }
 
-    // Use CSS variables for bubble backgrounds
     const bubbleBgVar = sender === 'user' ? 'var(--user-bubble-bg)' : 'var(--bot-bubble-bg)';
     const bubbleTextVar = sender === 'user' ? 'var(--user-bubble-text)' : 'var(--bot-bubble-text)';
-    // Add fade-in animation class
-    bubble.className = `w-fit max-w-3xl px-4 py-2 rounded-lg whitespace-pre-wrap text-left shadow-sm fade-in`; // Use rounded-lg, add shadow, add fade-in
+    bubble.className = `w-fit max-w-3xl px-4 py-2 rounded-lg whitespace-pre-wrap text-left shadow-sm fade-in`;
     bubble.style.backgroundColor = bubbleBgVar;
-    bubble.style.color = bubbleTextVar; // Apply specific text color
-    // Render markdown *after* potentially adding the button
-    // container.appendChild(bubble); // Append bubble later
+    bubble.style.color = bubbleTextVar;
 
-    // Add Edit button for user messages (only if messageId is valid)
-    // This primarily applies when re-rendering or if ID is known immediately
+    let buttonHtml = ''; // Store button HTML separately
+
     if (sender === 'user' && messageId) {
-      const editBtn = document.createElement('button');
-      // Use SVG Icon and improved Tailwind classes (consistent with chatHistory.js)
-      editBtn.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-          <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
-        </svg>
+      // Create button HTML string
+      buttonHtml = `
+        <button class="absolute top-1.5 left-1.5 p-1 text-[var(--user-bubble-text)]/60 hover:text-[var(--user-bubble-text)] bg-[var(--user-bubble-bg)]/50 hover:bg-[var(--user-bubble-bg)]/75 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 edit-button"
+                title="Edit message"
+                data-message-id="${messageId}"
+                data-raw-text="${escapeHtml(text)}">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+          </svg>
+        </button>
       `;
-      // Style edit button - use bubble text color for consistency
-      editBtn.className = 'absolute top-1.5 left-1.5 p-1 text-[var(--user-bubble-text)]/60 hover:text-[var(--user-bubble-text)] bg-[var(--user-bubble-bg)]/50 hover:bg-[var(--user-bubble-bg)]/75 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200'; // Adjust position slightly
-      editBtn.title = "Edit message"; // Add tooltip
-      editBtn.dataset.messageId = messageId; // Store ID on button
-      editBtn.dataset.rawText = text; // Store raw text on button
-      editBtn.onclick = (e) => {
-          e.stopPropagation(); // Prevent potential container clicks
-          // Use the globally exposed handler - Requires chatId!
-          // NOTE: createBubble doesn't have chatId readily available for *new* messages.
-          // This button likely won't work correctly for messages created by createBubble
-          // unless chatId is passed or retrieved differently here.
-          // For now, it primarily ensures visual consistency if IDs *were* added later.
-          if (window.handleAppEditClick && editingChatId) { // Check if editingChatId is available (might not be for new messages)
-             window.handleAppEditClick(editingChatId, messageId, text, container);
-          } else {
-             console.warn("Cannot edit new message immediately: chatId missing or handler unavailable.");
-             // Optionally disable or hide the button if chatId is missing
-          }
-      };
-      // Prepend button INSIDE the bubble, not the container
-      bubble.prepend(editBtn);
+      // Note: onclick is added globally later or handled by chatHistory.js
     }
 
-    // Render markdown content AFTER potentially adding the button
-    bubble.innerHTML = marked.parse(text) + bubble.innerHTML; // Prepend existing button HTML if it exists
-
-    // Append the bubble (which now contains the button if applicable) to the container
+    // Render markdown content and prepend button HTML
+    bubble.innerHTML = buttonHtml + marked.parse(text);
     container.appendChild(bubble);
+
+    // Add click listener for edit button *after* it's in the DOM (if created here)
+    // This might be redundant if chatHistory.js adds its own listeners
+    const editBtn = bubble.querySelector('.edit-button');
+    if (editBtn) {
+        editBtn.onclick = (e) => {
+            e.stopPropagation();
+            const btn = e.currentTarget;
+            const id = btn.dataset.messageId;
+            const rawText = btn.dataset.rawText;
+            // Requires chatId, which isn't available when creating *new* bubbles here.
+            // Rely on chatHistory.js to add functional buttons to loaded messages.
+            if (window.handleAppEditClick && window.getCurrentChatId) { // Check for global handler and chatId getter
+                const currentChatId = window.getCurrentChatId();
+                if (currentChatId) {
+                    window.handleAppEditClick(currentChatId, id, rawText, container);
+                } else {
+                    console.warn("Edit clicked, but currentChatId is not available.");
+                }
+            } else {
+                console.warn("Edit clicked, but handleAppEditClick or getCurrentChatId is not available.");
+            }
+        };
+    }
+
 
     return { container, bubble, rawText: text };
   }
 
-  // Function to handle edit button clicks (now accepts chatId and messageId)
-  // Expose globally for chatHistory.js
+  // Helper to escape HTML for data attributes
+  function escapeHtml(unsafe) {
+      if (!unsafe) return '';
+      return unsafe
+           .replace(/&/g, "&")
+           .replace(/</g, "<")
+           .replace(/>/g, ">")
+           .replace(/"/g, '"') // Use single quotes for the replacement string
+           .replace(/'/g, "&#039;");
+   }
+
+  // --- Editing Logic ---
   window.handleAppEditClick = async function(chatId, messageId, currentText, messageContainerElement) {
     if (isEditing) {
-        // If already editing, cancel the previous edit first
         cancelEdit();
     }
-
     isEditing = true;
-    editingChatId = chatId; // Store chatId
-    editingMessageId = messageId; // Store messageId
-    editingOriginalText = currentText; // Store original text
-    editingContainerElement = messageContainerElement; // Store the container
-
-    userInput.value = currentText; // Populate input area
+    editingChatId = chatId;
+    editingMessageId = messageId;
+    editingOriginalText = currentText;
+    editingContainerElement = messageContainerElement;
+    userInput.value = currentText;
     userInput.focus();
-    sendBtn.textContent = "Save Edit"; // Change button text
-    // sendBtn.onclick = handleSendOrSave; // Ensure button calls the correct handler (already set)
-
-    // Optionally add a cancel button
+    sendBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+        </svg>
+    `; // Change button to checkmark icon
+    sendBtn.title = "Save Edit"; // Add tooltip
     addCancelButton();
-
     console.log(`Editing mode activated for chat ID: ${chatId}, message ID: ${messageId}`);
   }
 
-  // Function to save the edited message
-  async function saveEdit() {
-    const newContent = userInput.value.trim();
-
-    // Check for all necessary editing state variables
+  // Modified saveEdit to accept the new content
+  async function saveEdit(newContent) {
+    // newContent is already trimmed from handleSendOrSave
     if (!editingChatId || !editingMessageId || !editingContainerElement) {
-        console.error("Save Edit called without active editing state (chatId, messageId, or element missing).");
-        cancelEdit(); // Reset state
+        console.error("Save Edit called without active editing state.");
+        cancelEdit(); // Still call cancelEdit to reset state
         return;
     }
 
     try {
       console.log(`Sending edit request for chat ${editingChatId}, message ID ${editingMessageId}`);
 
-      // --- Update UI Immediately ---
-      // 1. Remove all message containers visually *after* the edited one.
-      //    This gives immediate feedback that history is truncated.
+      // --- Immediate UI Update ---
       let elementToRemove = editingContainerElement.nextElementSibling;
       while (elementToRemove) {
         const nextElement = elementToRemove.nextElementSibling;
@@ -326,77 +455,92 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
         elementToRemove = nextElement;
       }
 
-      // 2. Update the edited message bubble's displayed content.
-      //    Use the clean text for display (strip metadata).
       const metadataRegex = /^Date: \d{1,2}\/\d{1,2}\/\d{4} \| Time: \d{1,2}:\d{2}:\d{2} \| Since last msg: \d+s\n/;
       const cleanNewContent = newContent.replace(metadataRegex, '');
-      const bubbleDiv = editingContainerElement.querySelector('div:not(button)'); // Find the bubble div itself
+      const bubbleDiv = editingContainerElement.querySelector('div:not(button)');
       if(bubbleDiv) {
-          bubbleDiv.innerHTML = marked.parse(cleanNewContent); // Use the latest clean content
-          // Update the raw text stored on the button (keep original metadata structure if user didn't change it)
-          const editBtn = editingContainerElement.querySelector('button[data-message-id]');
-          if (editBtn) {
-              editBtn.dataset.rawText = newContent; // Store potentially edited full content
-          }
+          // Re-add button HTML before parsing markdown
+          const buttonHtml = `
+            <button class="absolute top-1.5 left-1.5 p-1 text-[var(--user-bubble-text)]/60 hover:text-[var(--user-bubble-text)] bg-[var(--user-bubble-bg)]/50 hover:bg-[var(--user-bubble-bg)]/75 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 edit-button"
+                    title="Edit message"
+                    data-message-id="${editingMessageId}"
+                    data-raw-text="${escapeHtml(newContent)}">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+              </svg>
+            </button>
+          `;
+          bubbleDiv.innerHTML = buttonHtml + marked.parse(cleanNewContent);
+          // Re-attach listener to the new button
+          const editBtn = bubbleDiv.querySelector('.edit-button');
+           if (editBtn) {
+               editBtn.onclick = (e) => {
+                   e.stopPropagation();
+                   if (window.handleAppEditClick && window.getCurrentChatId) {
+                       const currentChatId = window.getCurrentChatId();
+                       if (currentChatId) {
+                           window.handleAppEditClick(currentChatId, editingMessageId, newContent, editingContainerElement);
+                       } else { console.warn("Edit clicked, but currentChatId is not available."); }
+                   } else { console.warn("Edit clicked, but handler/chatId unavailable."); }
+               };
+           }
       }
       // --- End Immediate UI Update ---
 
 
-      // Show loading indicator (sets state) and create inline bubble for edit
       if (window.showLoadingIndicator) {
-          window.showLoadingIndicator(); // Message parameter is ignored now
-          createInlineLoadingBubble(); // Create the visual indicator
+          window.showLoadingIndicator();
+          createInlineLoadingBubble();
       } else {
           console.warn("showLoadingIndicator function not found.");
       }
- 
-      // Send edit request using sendMessage (backend will handle stream)
+
       window.electronAPI.sendMessage('edit-message', {
           chatId: editingChatId,
           messageId: editingMessageId,
-          newContent // Send the full new content (potentially including metadata)
+          newContent
       });
 
-      // No need to handle result here, stream listeners will update UI with model response
-
     } catch (error) {
-      // Catch errors during immediate UI update or sending message
       console.error("Error during saveEdit:", error);
       alert("An error occurred while trying to save the edit.");
     }
-
-    // Reset editing state regardless of success/failure of backend call
-    cancelEdit(); // Use cancelEdit to clean up UI
+    cancelEdit(); // Reset editing state
   }
 
-  // Function to cancel the editing state
   function cancelEdit() {
     isEditing = false;
-    editingChatId = null; // Reset chatId
-    editingMessageId = null; // Reset messageId
+    editingChatId = null;
+    editingMessageId = null;
     editingOriginalText = null;
-    editingContainerElement = null; // Reset container
-    userInput.value = ""; // Clear input area
-    sendBtn.textContent = "Send"; // Restore button text
-    // sendBtn.onclick = handleSendOrSave; // Restore original handler logic if needed (already set)
-    removeCancelButton(); // Remove cancel button if it exists
+    editingContainerElement = null;
+    userInput.value = "";
+    // Restore original send button icon/text
+    sendBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+        </svg>
+    `;
+    sendBtn.title = "Send Message"; // Restore tooltip
+    removeCancelButton();
     console.log("Editing mode cancelled.");
   }
 
-  // Helper to add a cancel button
   function addCancelButton() {
-      removeCancelButton(); // Ensure no duplicates
+      removeCancelButton();
       const cancelButton = document.createElement('button');
-      cancelButton.textContent = "Cancel Edit";
+      cancelButton.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+        </svg>
+      `; // Use X icon
       cancelButton.id = "cancelEditBtn";
-      // Use component class for cancel button (adjusting padding/size)
-      cancelButton.className = "btn btn-secondary ml-2 text-xs py-1 px-3"; // Example using btn-secondary, adjust as needed
+      cancelButton.className = "btn btn-secondary p-2 ml-2"; // Adjust styling as needed
+      cancelButton.title = "Cancel Edit";
       cancelButton.onclick = cancelEdit;
-      // Append next to send button or input area
       sendBtn.parentNode.insertBefore(cancelButton, sendBtn.nextSibling);
   }
 
-  // Helper to remove the cancel button
   function removeCancelButton() {
       const cancelButton = document.getElementById('cancelEditBtn');
       if (cancelButton) {
@@ -404,63 +548,41 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
       }
   }
 
-  // For streaming, maintain a temporary "typing" bubble for the AI response.
-  let typingBubble = null;
-  let loadingBubbleElement = null; // Reference to the inline loading bubble
-
-  // Listen for partial responses to update the typing bubble in real time.
+  // --- Streaming Handlers ---
   window.electronAPI.onMessage('streamPartialResponse', (data) => {
-    // Remove inline loading bubble as soon as the first chunk arrives
-    removeInlineLoadingBubble(); // Call the helper function
-
+    removeInlineLoadingBubble();
     if (!typingBubble) {
-      // Create the actual bot message bubble
-      typingBubble = createBubble('bot', ''); // Start empty
+      typingBubble = createBubble('bot', '');
       chatWindow.appendChild(typingBubble.container);
     }
-    // Append text and render
     typingBubble.rawText += data.text;
-    // Ensure the bubble element exists before setting innerHTML
     if (typingBubble && typingBubble.bubble) {
         typingBubble.bubble.innerHTML = marked.parse(typingBubble.rawText);
     } else {
-        console.warn("StreamPartialResponse: typingBubble or typingBubble.bubble is null, cannot render partial response.");
+        console.warn("StreamPartialResponse: typingBubble or bubble is null.");
     }
-    chatWindow.scrollTop = chatWindow.scrollHeight;
-    // Note: hideLoadingIndicator (state reset) happens on final response
+    // Only scroll down if already near the bottom
+    if (isScrolledToBottom(chatWindow)) {
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
   });
 
-  // When the final response is received, finalize the bubble.
   window.electronAPI.onMessage('streamFinalResponse', (data) => {
-    // Ensure loading bubble is removed if it somehow persisted
-    removeInlineLoadingBubble(); // Call the helper function
-
+    removeInlineLoadingBubble();
     if (typingBubble) {
-        // Finalize the streamed bubble
-        typingBubble.rawText = data.text; // Use final complete text
-        // Ensure the bubble element exists before setting innerHTML
+        typingBubble.rawText = data.text;
         if (typingBubble.bubble) {
             typingBubble.bubble.innerHTML = marked.parse(data.text);
         } else {
-             console.warn("StreamFinalResponse: typingBubble.bubble is null, cannot render final response in existing bubble.");
-             // Fallback: create a new bubble if the old one is gone somehow
-             appendMessage('bot', data.text);
+             console.warn("StreamFinalResponse: typingBubble.bubble is null.");
+             appendMessage('bot', data.text); // Fallback
         }
-        // Add messageId if available in data (optional)
-        // if (data.messageId) typingBubble.container.dataset.messageId = data.messageId;
-        typingBubble = null; // Reset typing bubble reference
+        typingBubble = null;
     } else {
-        // If no streaming occurred (e.g., error, short response, or function call was last)
-        // create a final bubble directly.
-        // This case might happen if only a functionCallResponse was received before this.
-        console.log("StreamFinalResponse: No typing bubble existed, creating final message.");
-        appendMessage('bot', data.text); // Add messageId if available
+        console.log("StreamFinalResponse: No typing bubble, creating final message.");
+        appendMessage('bot', data.text);
     }
-
-    // Increment counter *after* model response is complete
-    messageIndexCounter++;
-
-    // Hide loading indicator state
+    messageIndexCounter++; // Increment counter after full response
     if (window.hideLoadingIndicator) {
         window.hideLoadingIndicator();
     } else {
@@ -468,88 +590,180 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
     }
   });
 
-  // Listen for tool function call responses and show them as a separate bubble.
   window.electronAPI.onMessage('functionCallResponse', (data) => {
-    // Append tool message - no messageId available here either
     appendMessage('bot', "Tool executed: " + data.text);
-     messageIndexCounter++; // Increment after model response (including tool calls)
-
-     // Ensure loading bubble is removed if it somehow persisted
-     removeInlineLoadingBubble(); // Call the helper function
-
-     // Hide loading indicator state
+    messageIndexCounter++; // Increment after tool response
+    removeInlineLoadingBubble();
      if (window.hideLoadingIndicator) {
          window.hideLoadingIndicator();
      } else {
          console.warn("hideLoadingIndicator function not found.");
      }
-});
+  });
 
-// --- Helper functions for inline loading bubble ---
-function createInlineLoadingBubble() {
-    removeInlineLoadingBubble(); // Ensure only one exists
+  // --- Listener for newly saved chats ---
+  window.electronAPI.onMessage('new-chat-saved', (chatData) => {
+    console.log(`[App] Received new-chat-saved event for chat ID: ${chatData.id}`);
+    // Assuming chatHistory.js exposes a function to add items to the list
+    if (window.addChatToHistoryList) {
+      window.addChatToHistoryList(chatData); // Pass { id, title, lastUpdated }
+    } else {
+      console.warn("[App] window.addChatToHistoryList function not found. Cannot update history UI dynamically.");
+      // As a fallback, maybe trigger a full refresh?
+      // if (window.loadChatHistory) window.loadChatHistory();
+    }
+  });
 
+  // --- Inline Loading Bubble Helpers ---
+  function createInlineLoadingBubble() {
+    removeInlineLoadingBubble();
     const container = document.createElement('div');
-    container.className = 'flex justify-start mb-2 relative group loading-bubble-container'; // Bot alignment + specific class
-
+    container.className = 'flex justify-start mb-2 relative group loading-bubble-container';
     const bubble = document.createElement('div');
-    // Use bot bubble styles but add spinner
-    bubble.className = 'w-fit max-w-3xl px-3 py-2 rounded-lg whitespace-pre-wrap text-left shadow-sm flex items-center space-x-2'; // Adjusted padding
+    bubble.className = 'w-fit max-w-3xl px-3 py-2 rounded-lg whitespace-pre-wrap text-left shadow-sm flex items-center space-x-2';
     bubble.style.backgroundColor = 'var(--bot-bubble-bg)';
     bubble.style.color = 'var(--bot-bubble-text)';
-
-    // Spinner element
     const spinner = document.createElement('div');
-    spinner.className = 'loading-spinner w-4 h-4 border-2 border-t-[var(--accent-color)] border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin flex-shrink-0'; // Added flex-shrink-0
-
+    spinner.className = 'loading-spinner w-4 h-4 border-2 border-t-[var(--accent-color)] border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin flex-shrink-0';
     bubble.appendChild(spinner);
     container.appendChild(bubble);
-
     chatWindow.appendChild(container);
-    chatWindow.scrollTop = chatWindow.scrollHeight;
-    loadingBubbleElement = container; // Store reference
-}
-
-function removeInlineLoadingBubble() {
+    // Only scroll down if already near the bottom
+    if (isScrolledToBottom(chatWindow)) {
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+    loadingBubbleElement = container;
+  }
+  function removeInlineLoadingBubble() {
     if (loadingBubbleElement) {
-        // Optional: Add a fade-out animation before removing
-        loadingBubbleElement.classList.add('fade-out-fast'); // Assuming fade-out-fast is defined in animations.css
+        loadingBubbleElement.classList.add('fade-out-fast');
         setTimeout(() => {
-             // Check parentNode before removing, in case it was already removed by other logic
              if (loadingBubbleElement && loadingBubbleElement.parentNode === chatWindow) {
                 chatWindow.removeChild(loadingBubbleElement);
              }
-             loadingBubbleElement = null; // Clear reference after potential timeout
-        }, 200); // Match animation duration
+             loadingBubbleElement = null;
+        }, 200);
     } else {
-         // Ensure reference is cleared if element was already gone or never created
          loadingBubbleElement = null;
     }
-}
+  }
 
-// --- Initialize Token Counter ---
-// Request initial token count on load
-try {
-  const initialUsage = await window.electronAPI.invoke('get-initial-token-usage');
-  updateTokenDisplay(initialUsage);
-} catch (error) {
-  console.error("Error fetching initial token usage:", error);
-  updateTokenDisplay(null); // Show N/A on error
-}
-window.electronAPI.onMessage('token-usage-updated', updateTokenDisplay); // Listen for updates
+  // --- Dynamic Input Area Logic ---
+  // --- Dynamic Input Area Logic (Revised) ---
+  function openExpandedInput() {
+    if (!inputOverlay || !expandedUserInput || !chatInputArea || isInputExpanded) {
+        console.error("[App] openExpandedInput: Pre-check failed. Elements:", {inputOverlay, expandedUserInput, chatInputArea}, "Expanded:", isInputExpanded);
+        return;
+    }
+    console.log("[App] Expanding input area...");
 
-// --- Fetch Personalities on Load ---
-await fetchPersonalities(); // Fetch personalities after DOM is ready
+    // 1. Copy content from original to expanded
+    expandedUserInput.value = userInput.value;
 
-  // --- Initialize Personality Selector ---
+    // 2. Hide original input area using Tailwind 'hidden' class
+    console.log("[App] Hiding chatInputArea:", chatInputArea);
+    chatInputArea.classList.add('hidden');
+
+    // 3. Show overlay with transitions by removing/adding Tailwind classes
+    console.log("[App] Making overlay visible. Elements:", {inputOverlay, inputOverlayBackdrop, expandedInputContainer});
+    inputOverlay.classList.remove('invisible', 'opacity-0', 'scale-95');
+    inputOverlay.classList.add('opacity-100', 'scale-100'); // Add final state classes
+    inputOverlayBackdrop.classList.remove('opacity-0');
+    inputOverlayBackdrop.classList.add('opacity-100'); // Make backdrop visible
+    expandedInputContainer.classList.remove('scale-95'); // Scale up the container
+    expandedInputContainer.classList.add('scale-100');
+    // Enable pointer events when visible
+    inputOverlay.style.pointerEvents = 'auto';
+
+    // 4. Focus the expanded textarea after transition
+    setTimeout(() => {
+        expandedUserInput.focus();
+        // Optional: Trigger resize/scroll adjustment if needed for expanded view
+        // expandedUserInput.dispatchEvent(new Event('input'));
+    }, 300); // Match CSS transition duration
+
+    isInputExpanded = true;
+  }
+
+  function closeExpandedInput() {
+    if (!inputOverlay || !expandedUserInput || !chatInputArea || !isInputExpanded) {
+        console.error("[App] closeExpandedInput: Pre-check failed. Elements:", {inputOverlay, expandedUserInput, chatInputArea}, "Expanded:", isInputExpanded);
+        return;
+    }
+    console.log("[App] Closing expanded input area...");
+
+    // 1. Copy content back from expanded to original (optional, maybe only on send?)
+    // Let's copy it back for consistency when closing via Esc/backdrop
+    userInput.value = expandedUserInput.value;
+
+    // 2. Hide overlay with transitions by adding/removing Tailwind classes
+    inputOverlay.classList.remove('opacity-100', 'scale-100'); // Remove final state classes
+    inputOverlay.classList.add('invisible', 'opacity-0', 'scale-95'); // Add initial hidden state classes
+    inputOverlayBackdrop.classList.remove('opacity-100'); // Hide backdrop
+    inputOverlayBackdrop.classList.add('opacity-0');
+    expandedInputContainer.classList.remove('scale-100'); // Scale down the container
+    expandedInputContainer.classList.add('scale-95');
+    // Disable pointer events when hidden
+    inputOverlay.style.pointerEvents = 'none';
+
+    // 3. Show original input area by removing Tailwind 'hidden' class
+    console.log("[App] Showing chatInputArea:", chatInputArea);
+    chatInputArea.classList.remove('hidden');
+
+    // 4. Clear expanded input
+    expandedUserInput.value = '';
+
+    // 5. Focus the original textarea after transition (optional)
+    setTimeout(() => {
+        userInput.focus();
+        // Trigger resize calculation on original input
+        userInput.dispatchEvent(new Event('input'));
+    }, 300); // Match CSS transition duration
+
+    isInputExpanded = false;
+  }
+
+  // --- Initial Setup ---
+  // Fetch config and populate model selector FIRST
+  await fetchConfig();
+
+  // Then fetch personalities
+  await fetchPersonalities();
+
+  // Initialize Token Counter Display
+  try {
+    const initialUsage = await window.electronAPI.invoke('get-initial-token-usage');
+    updateTokenDisplay(initialUsage);
+  } catch (error) {
+    console.error("Error fetching initial token usage:", error);
+    updateTokenDisplay(null);
+  }
+  window.electronAPI.onMessage('token-usage-updated', updateTokenDisplay);
+
+  // Initialize Personality Selector Component
   if (personalitySelector && openPersonalitySelectorBtn) {
-    personalitySelector.init(handleCurrentChatPersonalitySelect); // Initialize with the callback
+    personalitySelector.init(handleCurrentChatPersonalitySelect);
     openPersonalitySelectorBtn.addEventListener('click', () => {
-      personalitySelector.show(); // Show the selector on button click
+      personalitySelector.show();
     });
   } else {
     console.error("Failed to initialize personality selector: Component or button not found.");
   }
-  // --- End Personality Selector Init ---
 
+  // NOTE: Assuming customDropdown.js initializes itself and handles clicks
+  // Add listeners for expand/close buttons
+  if (expandInputBtn) {
+      expandInputBtn.addEventListener('click', openExpandedInput);
+  } else {
+      console.error("Expand input button not found.");
+  }
+  if (closeExpandedInputBtn) {
+      closeExpandedInputBtn.addEventListener('click', closeExpandedInput);
+  } else {
+      console.error("Close expanded input button not found.");
+  }
+  // Add listener to backdrop click to close
+  inputOverlayBackdrop.addEventListener('click', closeExpandedInput);
+
+  console.log("[App] Frontend initialized.");
 });

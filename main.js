@@ -265,7 +265,13 @@ ipcMain.on('chatMessage', async (event, data) => {
     const currentHistory = chatManager.getConversationHistory();
     const currentPersonality = chatManager.getCurrentPersonalityConfig();
     const currentModel = chatManager.getActiveModelInstance();
-    if (currentChatId && currentHistory && currentModel && currentPersonality) {
+    // Add explicit check for valid chatId string before final save
+    if (!currentChatId || typeof currentChatId !== 'string') {
+        console.error(`[main.chatMessage] Invalid or missing currentChatId ('${currentChatId}') before final save. Aborting save.`);
+        // Log the error but prevent saving with a bad ID.
+        // Consider sending an error to the renderer if this state is problematic.
+    } else if (currentHistory && currentModel && currentPersonality) { // Check other required info
+        // Proceed with saving only if chatId is a valid string and other info exists
         await chatStorage.saveChat(
             currentChatId,
             currentHistory,
@@ -273,18 +279,45 @@ ipcMain.on('chatMessage', async (event, data) => {
             currentPersonality.id // Save personality ID
         );
         console.log(`[main] Final conversation history saved for chat ${currentChatId} with personality ${currentPersonality.id}.`);
+
+        // If this was the first save (indicated by shouldGenerateTitle), notify the renderer
+        if (shouldGenerateTitle && mainWindow) {
+             console.log(`[main] Notifying renderer of newly saved chat: ${currentChatId}`);
+             // Send essential info for the renderer to add the item to the list
+             mainWindow.webContents.send('new-chat-saved', { id: currentChatId, title: chatStorage.generateDefaultTitle(currentHistory), lastUpdated: Date.now() });
+        }
     } else {
-        console.error("[main] Could not save chat history - missing critical information (chatId, history, model, or personality).");
+        // Log if other info is missing, even if chatId was valid
+        console.error("[main] Could not save chat history - missing history, model, or personality information.");
     }
 
 
-    // --- Trigger Title Generation (if marked earlier) ---
-    if (shouldGenerateTitle) {
-      console.log("[main] Triggering title generation...");
-      const generatedTitle = await chatManager.triggerTitleGeneration(); // Uses active model instance now
-      if (generatedTitle) {
-        event.sender.send('chat-title-updated', { chatId: chatManager.getCurrentChatId(), newTitle: generatedTitle });
-      }
+    // --- Attempt Title Generation (if not already done) ---
+    const currentChatIdForTitleCheck = chatManager.getCurrentChatId();
+    if (currentChatIdForTitleCheck && typeof currentChatIdForTitleCheck === 'string') {
+        try {
+            const chatData = await chatStorage.loadChat(currentChatIdForTitleCheck);
+            // Check if chat exists and title hasn't been generated yet
+            if (chatData && !chatData.titleGenerated) {
+                console.log(`[main] Chat ${currentChatIdForTitleCheck} needs title. Triggering generation...`);
+                const generatedTitle = await chatManager.triggerTitleGeneration(); // Centralized logic
+                if (generatedTitle) {
+                    // Send update to renderer immediately
+                    event.sender.send('chat-title-updated', { chatId: currentChatIdForTitleCheck, newTitle: generatedTitle });
+                    console.log(`[main] Title generated and renderer notified for chat ${currentChatIdForTitleCheck}.`);
+                } else {
+                     console.log(`[main] Title generation attempt for ${currentChatIdForTitleCheck} did not return a title.`);
+                }
+            } else if (!chatData) {
+                 console.warn(`[main] Could not load chat data for ${currentChatIdForTitleCheck} to check title generation status.`);
+            } else {
+                 // console.log(`[main] Title already generated for chat ${currentChatIdForTitleCheck}. Skipping generation.`);
+            }
+        } catch (error) {
+            console.error(`[main] Error during title generation check/trigger for chat ${currentChatIdForTitleCheck}:`, error);
+        }
+    } else {
+         console.warn("[main] Cannot check/trigger title generation: Invalid chat ID.");
     }
 
   } catch (error) {

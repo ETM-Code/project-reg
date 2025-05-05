@@ -156,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
       currentChatId = newChatId; // Update the current chat ID tracker
       console.log('Started new chat with ID:', newChatId);
       clearChatWindow();
-      await loadChatList(); // Reload the list to show the new chat
+      // await loadChatList(); // No longer needed, new chat added via 'new-chat-saved' event in app.js
       updateChatListSelection(); // Highlight the new chat
     } catch (error) {
       console.error('Failed to start new chat:', error);
@@ -218,6 +218,30 @@ document.addEventListener('DOMContentLoaded', () => {
   }
  
  
+   // Function to dynamically add a new chat item to the list
+   function addChatToHistoryList(chatData) {
+       if (!chatData || !chatData.id) {
+           console.error("[ChatHistory] Invalid chat data received for adding to list:", chatData);
+           return;
+       }
+       console.log(`[ChatHistory] Adding new chat item to list: ID=${chatData.id}, Title=${chatData.title}`);
+       const chatItem = document.createElement('div');
+       chatItem.className = 'chat-list-item-base'; // Use consistent styling
+       chatItem.textContent = chatData.title || `Chat ${chatData.id}`;
+       chatItem.dataset.chatId = chatData.id;
+       chatItem.addEventListener('click', () => loadChat(chatData.id));
+
+       // Prepend to the top of the list
+       const firstChild = chatListDiv.firstChild;
+       // Remove the "No saved chats" placeholder if it exists
+       const placeholder = chatListDiv.querySelector('p');
+       if (placeholder) chatListDiv.removeChild(placeholder);
+
+       chatListDiv.insertBefore(chatItem, firstChild);
+       // Optionally, call updateChatListSelection() if you want the new item highlighted immediately
+       // updateChatListSelection(); // Might need adjustment if currentChatId isn't set yet
+   }
+
    // --- Event Listeners ---
    newChatBtn.addEventListener('click', startNewChat);
 
@@ -237,3 +261,6 @@ document.addEventListener('DOMContentLoaded', () => {
 window.getCurrentChatId = () => {
   return currentChatId;
 };
+
+// Expose function to add chat items dynamically
+window.addChatToHistoryList = addChatToHistoryList;

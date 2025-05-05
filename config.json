@@ -15,10 +15,70 @@
     "gemini": "AIzaSyDGIsTiIwtBWD3k7NNn3gwu5mOx-OjXnc0",
     "openai": "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"
   },
+  "availableModels": [
+    {
+      "id": "gpt-40-mini",
+      "name": "GPT-4o-Mini",
+      "implementation": "gpt",
+      "provider": "openai"
+    },
+    {
+      "id": "gpt-4o",
+      "name": "GPT-4o",
+      "implementation": "gpt",
+      "provider": "openai"
+    },
+    {
+      "id": "gpt-4.1",
+      "name": "GPT-4.1",
+      "implementation": "gpt",
+      "provider": "openai"
+    },
+    {
+      "id": "gpt-4.1-nano",
+      "name": "GPT-4.1-nano",
+      "implementation": "gpt",
+      "provider": "openai"
+    },
+    {
+      "id": "gpt-4.5-preview",
+      "name": "GPT-4.5",
+      "implementation": "gpt",
+      "provider": "openai"
+    },
+    {
+      "id": "gemini-2.5-flash-preview-04-17",
+      "name": "Gemini 2.5 Flash",
+      "implementation": "gemini",
+      "provider": "google"
+    },
+    {
+      "id": "o4-mini",
+      "name": "o4 Mini",
+      "implementation": "openai-reasoning",
+      "provider": "openai",
+      "defaultParams": {
+        "reasoning": {
+          "effort": "medium"
+        }
+      }
+    },
+    {
+      "id": "o3",
+      "name": "o3 Full",
+      "implementation": "openai-reasoning",
+      "provider": "openai",
+      "defaultParams": {
+        "reasoning": {
+          "effort": "medium"
+        }
+      }
+    }
+  ],
   "defaults": {
     "personalityId": "reg-lifecoach",
-    "modelImplementation": "gpt",
-    "modelName": "gpt-4o-mini"
+    "modelId": "gpt-4.5-preview",
+    "defaultModel": "gpt-4o"
   },
   "prompts": [
     {
@@ -30,8 +90,7 @@
       "id": "regLifecoachPrompt",
       "name": "Reg Life Coach",
       "path": "src/prompt/regLifecoachPrompt.md"
-    }
-,
+    },
     {
       "id": "clarionRoleplayerPrompt",
       "name": "Clarion Roleplayer",
@@ -62,103 +121,175 @@
     {
       "id": "my-context",
       "name": "My Context",
-      "paths": ["src/context/myContext.md"]
+      "paths": [
+        "src/context/myContext.md"
+      ]
     },
     {
       "id": "notes-context",
       "name": "Notes",
-      "paths": ["data/notes.txt"]
+      "paths": [
+        "data/notes.txt"
+      ]
     }
   ],
   "personalities": [
     {
       "id": "reg-lifecoach",
       "name": "Reg",
+      "icon": "src/renderer/media/reg.png",
       "description": "Your supportive life coach.",
       "promptId": "regLifecoachPrompt",
-      "availableContextSetIds": ["my-context", "notes-context"],
-      "defaultContextSetIds": ["my-context", "notes-context"],
-      "tools": ["MakeNote", "CreateEvent", "CheckEvents", "StartTimer"],
-      "modelImplementation": "gpt",
-      "modelName": "gpt-4o-mini",
-      "allowCustomInstructions": true,
-      "customInstructions": ""
-    },
-    {
-      "id": "default-gemini",
-      "name": "Default Gemini",
-      "description": "Default personality using Gemini.",
-      "promptId": "regLifecoachPrompt",
-      "availableContextSetIds": ["my-context", "notes-context"],
-      "defaultContextSetIds": ["my-context", "notes-context"],
-      "tools": ["MakeNote", "CreateEvent", "CheckEvents", "StartTimer"],
-      "modelImplementation": "gemini",
-      "modelName": "gemini-1.5-flash-latest",
+      "availableContextSetIds": [
+        "my-context",
+        "notes-context"
+      ],
+      "defaultContextSetIds": [
+        "my-context",
+        "notes-context"
+      ],
+      "tools": [
+        "MakeNote",
+        "CreateEvent",
+        "CheckEvents",
+        "StartTimer"
+      ],
+      "modelId": "gpt-4.5-preview",
       "allowCustomInstructions": true,
       "customInstructions": ""
     },
     {
       "id": "clarion-roleplayer",
       "name": "Clarion",
+      "icon": "src/renderer/media/clarion.png",
       "description": "A versatile roleplaying partner.",
       "promptId": "clarionRoleplayerPrompt",
-      "availableContextSetIds": ["my-context", "notes-context"],
-      "defaultContextSetIds": ["my-context", "notes-context"],
-      "tools": ["MakeNote", "CreateEvent", "CheckEvents", "StartTimer"],
-      "modelImplementation": "gpt",
-      "modelName": "gpt-4o-mini",
+      "availableContextSetIds": [
+        "my-context",
+        "notes-context"
+      ],
+      "defaultContextSetIds": [
+        "my-context",
+        "notes-context"
+      ],
+      "tools": [
+        "MakeNote"
+      ],
+      "modelId": "gpt-4o",
       "allowCustomInstructions": true,
       "customInstructions": ""
     },
     {
       "id": "mitchell-reviewer",
       "name": "Mitchell",
+      "icon": "src/renderer/media/reviewer.png",
       "description": "Provides critical reviews and feedback.",
       "promptId": "mitchellReviewerPrompt",
-      "availableContextSetIds": ["my-context", "notes-context"],
-      "defaultContextSetIds": ["my-context", "notes-context"],
-      "tools": ["MakeNote", "CreateEvent", "CheckEvents", "StartTimer"],
-      "modelImplementation": "gpt",
-      "modelName": "gpt-4o-mini",
+      "availableContextSetIds": [
+        "my-context",
+        "notes-context"
+      ],
+      "defaultContextSetIds": [
+        "my-context",
+        "notes-context"
+      ],
+      "tools": [],
+      "modelId": "o4-mini",
       "allowCustomInstructions": true,
       "customInstructions": ""
     },
     {
       "id": "carlos-brainstormer",
       "name": "Carlos",
+      "icon": "src/renderer/media/brainstorm.png",
       "description": "Helps brainstorm ideas and solutions.",
       "promptId": "carlosBrainstormerPrompt",
-      "availableContextSetIds": ["my-context", "notes-context"],
-      "defaultContextSetIds": ["notes-context"],
-      "tools": ["MakeNote", "CreateEvent", "CheckEvents", "StartTimer"],
-      "modelImplementation": "gpt",
-      "modelName": "gpt-4o-mini",
+      "availableContextSetIds": [
+        "my-context",
+        "notes-context"
+      ],
+      "defaultContextSetIds": [
+        "notes-context"
+      ],
+      "tools": [
+        "MakeNote"
+      ],
+      "modelId": "gpt-4o",
       "allowCustomInstructions": true,
       "customInstructions": ""
     },
     {
       "id": "context-creator",
       "name": "Context Creator",
+      "icon": "src/renderer/media/contexter.png",
       "description": "Generates context based on input.",
       "promptId": "contextCreatorPrompt",
-      "availableContextSetIds": ["my-context", "notes-context"],
+      "availableContextSetIds": [],
       "defaultContextSetIds": [],
       "tools": [],
-      "modelImplementation": "gpt",
-      "modelName": "gpt-4o-mini",
+      "modelId": "gpt-4.1-nano",
       "allowCustomInstructions": true,
       "customInstructions": ""
     },
     {
       "id": "context-aware",
       "name": "Context-Aware",
+      "icon": "src/renderer/media/contextaware.png",
       "description": "Utilizes provided context effectively.",
       "promptId": "contextAwarePrompt",
-      "availableContextSetIds": ["my-context", "notes-context"],
-      "defaultContextSetIds": ["my-context", "notes-context"],
-      "tools": ["MakeNote", "CreateEvent", "CheckEvents", "StartTimer"],
-      "modelImplementation": "gpt",
-      "modelName": "gpt-4o-mini",
+      "availableContextSetIds": [
+        "my-context",
+        "notes-context"
+      ],
+      "defaultContextSetIds": [
+        "my-context",
+        "notes-context"
+      ],
+      "tools": [
+        "MakeNote",
+        "CreateEvent",
+        "CheckEvents",
+        "StartTimer"
+      ],
+      "modelId": "gpt-4o",
+      "allowCustomInstructions": true,
+      "customInstructions": ""
+    },
+    {
+      "id": "default-gemini",
+      "name": "Default Gemini",
+      "icon": "src/renderer/media/gemini.png",
+      "description": "Default personality using Gemini.",
+      "promptId": "regLifecoachPrompt",
+      "availableContextSetIds": [
+        "my-context",
+        "notes-context"
+      ],
+      "defaultContextSetIds": [
+        "my-context",
+        "notes-context"
+      ],
+      "tools": [
+        "MakeNote"
+      ],
+      "modelId": "gemini-2.5-flash-latest",
+      "allowCustomInstructions": true,
+      "customInstructions": ""
+    },
+    {
+      "id": "reasoning-assistant",
+      "name": "Reasoning Assistant",
+      "icon": "src/renderer/media/reasoning.png",
+      "description": "Uses OpenAI Reasoning (o4-mini).",
+      "promptId": "regLifecoachPrompt",
+      "availableContextSetIds": [
+        "my-context"
+      ],
+      "defaultContextSetIds": [
+        "my-context"
+      ],
+      "tools": [],
+      "modelId": "o4-mini",
       "allowCustomInstructions": true,
       "customInstructions": ""
     }

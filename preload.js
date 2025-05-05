@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           'load-chat',
           'get-current-chat-id',
           'get-initial-token-usage',
+          'get-config', // Added channel for fetching config
           // Settings Modal & Personality Channels
           'get-api-keys',
           'save-api-key',
@@ -44,7 +45,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
           'set-active-personality',
           'set-current-chat-personality',
           'get-personality-details',
-          'save-personality-settings'
+          'save-personality-settings',
+          'get-settings', // Added for global settings modal
+          'save-setting'  // Added for global settings modal
       ];
        if (allowedInvokeChannels.includes(channel)) {
            return ipcRenderer.invoke(channel, data);

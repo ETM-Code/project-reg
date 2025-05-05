@@ -203,16 +203,6 @@ class GeminiChat extends AIModelInterface {
 
   /**
    * @override
-   * Gemini does not have a dedicated title generation feature.
-   * @returns {Promise<null>}
-   */
-  async generateTitle(history) {
-    console.log("[GeminiChat] Title generation not supported.");
-    return null;
-  }
-
-  /**
-   * @override
    */
   getModelName() {
     return this.modelName;

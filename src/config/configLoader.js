@@ -1,8 +1,9 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { app } = require('electron'); // Import app
 
-// Construct the absolute path to config.json in the project root
-const configPath = path.join(__dirname, '..', '..', 'config.json'); // Adjust path relative to src/config
+// Construct the absolute path to config.json relative to the app's root path
+const configPath = path.join(app.getAppPath(), 'config.json');
 
 /**
  * Loads the configuration from config.json.

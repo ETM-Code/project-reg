@@ -19,8 +19,8 @@ class GPTChat extends AIModelInterface {
    * @param {import('./AIModelInterface').ModelInitializationConfig} config
    */
   initialize(config) {
-    console.log(`[GPTChat] Initializing with model: ${config.modelName}`);
-    this.modelName = config.modelName;
+    console.log(`[GPTChat] Initializing with model ID: ${config.modelId}`); // Use config.modelId
+    this.modelName = config.modelId; // Use config.modelId
     this.personality = config.personality; // Store for later use if needed
 
     // 1. Try getting the API key from settingsManager
@@ -152,52 +152,6 @@ class GPTChat extends AIModelInterface {
     } catch (error) {
       console.error(`[GPTChat] Error calling OpenAI API (${this.modelName}):`, error);
       throw error; // Re-throw the error
-    }
-  }
-
-  /**
-   * @override
-   * @param {Array<object>} history - Expects first user message and first model response.
-   * @returns {Promise<string|null>}
-   */
-  async generateTitle(history) {
-    if (!this.openaiClient) {
-       console.warn("[GPTChat] Cannot generate title, client not initialized.");
-       return null;
-    }
-    if (history.length < 2) {
-        console.warn("[GPTChat] Cannot generate title, history too short.");
-        return null;
-    }
-
-    // Extract first user message and first model response
-    const firstUserMessage = history.find(m => m.role === 'user')?.parts[0]?.text || '';
-    const firstModelResponse = history.find(m => m.role === 'model')?.parts[0]?.text || '';
-
-    if (!firstUserMessage || !firstModelResponse) {
-        console.warn("[GPTChat] Cannot generate title, missing first user or model message.");
-        return null;
-    }
-
-    const titlePrompt = `Based on the following first user message and first model response, generate a very concise title (5 words maximum) for this chat session. Only return the title text, nothing else.\n\nUser: ${firstUserMessage}\nModel: ${firstModelResponse}\n\nTitle:`;
-
-    // TODO: Make the title generation model configurable via settingsManager
-    const titleModel = "gpt-4o-mini"; // Using mini for cost/speed
-
-    try {
-      console.log(`[GPTChat] Requesting title generation using ${titleModel}`);
-      const response = await this.openaiClient.chat.completions.create({
-        model: titleModel,
-        messages: [{ role: "user", content: titlePrompt }],
-        temperature: 0.5,
-        max_tokens: 20,
-      });
-      const title = response.choices[0].message.content.trim().replace(/^"|"$/g, ''); // Remove surrounding quotes if any
-      console.log(`[GPTChat] Generated title: ${title}`);
-      return title;
-    } catch (error) {
-      console.error("[GPTChat] Error generating chat title:", error);
-      return null;
     }
   }
 

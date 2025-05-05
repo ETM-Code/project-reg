@@ -1,11 +1,27 @@
 // src/models/chatManager.js - Manages chat state, personalities, and interaction with AI model implementations.
+const OpenAI = require("openai"); // <-- Add OpenAI import
 const settingsManager = require('../config/settingsManager');
 const chatStorage = require('../services/chatStorage');
 const AIModelInterface = require('./AIModelInterface'); // Import the interface definition
 const GPTChat = require('./gptChat'); // Import the concrete GPT implementation
 const GeminiChat = require('./geminiChat'); // Import the concrete Gemini implementation
+const OpenAIReasoningChat = require('./openaiReasoningChat'); // Import the new reasoning implementation
 const actionsManager = require('../actions/ActionsManager'); // Import ActionsManager instance
 // Loaders are used by the model implementations now, not directly here.
+
+// --- Dedicated Client for Title Generation ---
+let titleGenClient = null;
+try {
+    const openaiApiKey = settingsManager.getApiKey('openai') || process.env.OPENAI_API_KEY;
+    if (openaiApiKey) {
+        titleGenClient = new OpenAI({ apiKey: openaiApiKey });
+        console.log("[ChatManager] Dedicated OpenAI client for title generation initialized.");
+    } else {
+        console.warn("[ChatManager] OpenAI API key not found. Title generation will be disabled.");
+    }
+} catch (error) {
+    console.error("[ChatManager] Failed to initialize dedicated OpenAI client for title generation:", error);
+}
 
 // --- State Variables ---
 let conversationHistory = [];
@@ -14,6 +30,7 @@ let currentChatId = null;
 let activeModelInstance = null;
 /** @type {import('../config/settingsManager').Personality | null} */
 let currentPersonalityConfig = null;
+let currentReasoningContext = null; // State for reasoning context persistence
 
 // --- Initialization and Personality Management ---
 
@@ -30,17 +47,26 @@ async function setActivePersonality(personalityId) {
   }
   currentPersonalityConfig = personality;
 
-  // Determine model implementation type (e.g., 'gpt', 'gemini')
-  const implementationType = personality.modelImplementation || settingsManager.getDefaults().modelImplementation;
-  const modelName = personality.modelName || settingsManager.getDefaults().modelName;
+  // Get model configuration using modelId
+  const modelId = personality.modelId || settingsManager.getDefaults().modelId;
+  if (!modelId) {
+      throw new Error(`[ChatManager] Personality ${personalityId} has no modelId and no default modelId is set.`);
+  }
+  const modelConfig = settingsManager.getModelById(modelId);
+  if (!modelConfig) {
+      throw new Error(`[ChatManager] Model configuration not found for ID: ${modelId}`);
+  }
 
-  console.log(`[ChatManager] Using implementation: ${implementationType}, Model: ${modelName}`);
+  const implementationType = modelConfig.implementation;
+  console.log(`[ChatManager] Using implementation: ${implementationType}, Model ID: ${modelId}`);
 
-  // Instantiate the correct model class
+  // Instantiate the correct model class based on implementation type
   if (implementationType === 'gpt') {
     activeModelInstance = new GPTChat();
   } else if (implementationType === 'gemini') {
     activeModelInstance = new GeminiChat();
+  } else if (implementationType === 'openai-reasoning') {
+    activeModelInstance = new OpenAIReasoningChat();
   } else {
     throw new Error(`[ChatManager] Unsupported model implementation type: ${implementationType}`);
   }
@@ -48,10 +74,10 @@ async function setActivePersonality(personalityId) {
   // Prepare initialization config for the model instance
   const modelInitConfig = {
     // API key retrieval is handled within the model's initialize method using settingsManager
-    modelName: modelName,
+    modelId: modelId, // Pass modelId
+    modelConfig: modelConfig, // Pass the full model config object
     personality: currentPersonalityConfig, // Pass full personality for context
-    // prompt: settingsManager.getPromptById(currentPersonalityConfig.promptId), // Optionally pass resolved prompt/context
-    // contextSet: settingsManager.getContextSetById(currentPersonalityConfig.contextSetId),
+    // defaultParams: modelConfig.defaultParams, // Pass default params if needed by model
   };
 
   try {
@@ -128,13 +154,29 @@ async function sendMessageToModel() {
        // No overrides by default, model implementation will load defaults
    };
 
-   console.log(`[ChatManager] Sending history (length ${conversationHistory.length}) to ${activeModelInstance.getImplementationType()}:${activeModelInstance.getModelName()}`);
+   // Add reasoning context if applicable
+   if (activeModelInstance instanceof OpenAIReasoningChat && currentReasoningContext) {
+       console.log("[ChatManager] Adding reasoning context to request.");
+       options.reasoning = currentReasoningContext;
+       currentReasoningContext = null; // Consume context after adding it
+   }
+
+   console.log(`[ChatManager] Sending history (length ${conversationHistory.length}) to ${activeModelInstance.getImplementationType()}:${activeModelInstance.getModelName()}`); // Use getModelName()
 
    try {
        // Pass current history. The model instance handles transformation and API call.
-       // The 'message' parameter to sendMessageStream is effectively null/ignored here,
-       // as the history already contains the last user message appended by appendUserMessage.
        const result = await activeModelInstance.sendMessageStream(conversationHistory, null, options);
+
+       // Store reasoning context from response if applicable
+       if (activeModelInstance instanceof OpenAIReasoningChat && result.rawResponse?.reasoning) {
+           console.log("[ChatManager] Storing reasoning context from response.");
+           currentReasoningContext = result.rawResponse.reasoning;
+       } else {
+           // Clear context if the model didn't return any (or wasn't a reasoning model)
+           // This prevents stale context from being used if the model type changes mid-chat (unlikely but possible)
+           currentReasoningContext = null;
+       }
+
        return result;
    } catch (error) {
        console.error(`[ChatManager] Error during sendMessageStream for ${activeModelInstance.getImplementationType()}:`, error);
@@ -247,6 +289,7 @@ async function startNewChat() {
   currentChatId = Date.now().toString();
   activeModelInstance = null; // Clear the model instance
   currentPersonalityConfig = null;
+  currentReasoningContext = null; // Reset reasoning context for new chat
 
   try {
     // Initialize with the default personality from settings
@@ -299,10 +342,16 @@ async function editMessage(messageId, newContent) {
 
     // 4. Save the truncated history (this becomes the new "current" state)
     // Need to save personality ID as well
+    if (!currentChatId || typeof currentChatId !== 'string') {
+        console.error(`[ChatManager.editMessage] Invalid currentChatId ('${currentChatId}') before saving.`);
+        // Return an error structure consistent with other failures
+        return { error: `Cannot save edit, chat ID is invalid.` };
+    }
+    // Ensure activeModelInstance and currentPersonalityConfig are valid too, although less likely to be the root cause here
     await chatStorage.saveChat(
         currentChatId,
         conversationHistory,
-        activeModelInstance?.getModelName() || 'unknown', // Get model name from instance
+        activeModelInstance?.getModelId() || 'unknown', // Use getModelId()
         currentPersonalityConfig?.id // Get personality ID
     );
 
@@ -325,47 +374,78 @@ async function editMessage(messageId, newContent) {
   return { error: `Message ID ${messageId} not found.` }; // Indicate edit failure clearly
 }
 
-// New function to handle the title generation logic
+// New function to handle the title generation logic using a dedicated client
 async function triggerTitleGeneration() {
-  if (!activeModelInstance) {
-      console.warn("[ChatManager] Cannot generate title, no active model instance.");
-      return null;
-  }
-  if (conversationHistory.length < 2) {
-      console.log("[ChatManager] History too short for title generation.");
-      return null;
-  }
+    // Use the dedicated title generation client
+    if (!titleGenClient) {
+        console.warn("[ChatManager] Title generation skipped: OpenAI client not initialized (missing API key?).");
+        return null;
+    }
+    if (!currentChatId || typeof currentChatId !== 'string') {
+         console.warn(`[ChatManager] Title generation skipped: Invalid currentChatId ('${currentChatId}').`);
+         return null;
+    }
+    if (conversationHistory.length < 2) {
+        console.log("[ChatManager] Title generation skipped: History too short.");
+        return null;
+    }
 
-  // Avoid regenerating if already done
-  const chatData = await chatStorage.loadChat(currentChatId);
-  if (chatData && chatData.titleGenerated) {
-    console.log(`[ChatManager] Title already generated for chat ${currentChatId}`);
-    return null;
-  }
+    // Avoid regenerating if already done
+    const chatData = await chatStorage.loadChat(currentChatId);
+    if (chatData && chatData.titleGenerated) {
+        console.log(`[ChatManager] Title already generated for chat ${currentChatId}`);
+        return null;
+    }
 
-  // Pass only the relevant part of history (first user, first model)
-  const historyForTitle = conversationHistory.slice(0, 2);
+    // Extract first user message and first model response
+    const firstUserMessage = conversationHistory.find(m => m.role === 'user')?.parts[0]?.text || '';
+    const firstModelResponse = conversationHistory.find(m => m.role === 'model')?.parts[0]?.text || '';
 
-  try {
-      const generatedTitle = await activeModelInstance.generateTitle(historyForTitle);
+    if (!firstUserMessage || !firstModelResponse) {
+        console.warn("[ChatManager] Title generation skipped: Missing first user or model message.");
+        return null;
+    }
 
-      if (generatedTitle) {
-        console.log(`[ChatManager] Generated title for chat ${currentChatId}: ${generatedTitle}`);
-        // Save the updated title and mark as generated
-        // Ensure updateChatTitle saves the current personality ID as well
-        await chatStorage.updateChatTitle(
-            currentChatId,
-            generatedTitle,
-            conversationHistory, // Save full current history
-            activeModelInstance.getModelName(), // Save specific model name used
-            currentPersonalityConfig?.id // Pass the personality ID
-        );
-        return generatedTitle;
-      }
-  } catch (error) {
-      console.error("[ChatManager] Error during title generation:", error);
-  }
-  return null; // Return null if generation failed or not supported (e.g., try block finished without returning title)
+    const titlePrompt = `Based on the following first user message and first model response, generate a very concise title (5 words maximum) for this chat session. Only return the title text, nothing else.\n\nUser: ${firstUserMessage}\nModel: ${firstModelResponse}\n\nTitle:`;
+    const titleModel = "gpt-4.1-nano"; // Enforce specific model
+
+    try {
+        console.log(`[ChatManager] Requesting title generation using dedicated client and model ${titleModel}`);
+        const response = await titleGenClient.chat.completions.create({
+            model: titleModel,
+            messages: [{ role: "user", content: titlePrompt }],
+            temperature: 0.5,
+            max_tokens: 20,
+        });
+        const generatedTitle = response.choices[0].message.content.trim().replace(/^"|"$/g, ''); // Remove surrounding quotes if any
+
+        if (generatedTitle) {
+            console.log(`[ChatManager] Generated title for chat ${currentChatId}: ${generatedTitle}`);
+            // Save the updated title and mark as generated
+            // Use the currently active model/personality for saving context, even though title gen used OpenAI
+            const currentModel = getActiveModelInstance();
+            const currentPersonality = getCurrentPersonalityConfig();
+            if (currentModel && currentPersonality) {
+                await chatStorage.updateChatTitle(
+                    currentChatId,
+                    generatedTitle,
+                    conversationHistory, // Save full current history
+                    currentModel.getModelName(), // Save the *active* chat model name
+                    currentPersonality.id // Save the *active* personality ID
+                );
+                return generatedTitle;
+            } else {
+                 console.error("[ChatManager] Could not save generated title - missing active model or personality info.");
+                 return null; // Indicate failure to save, even though title was generated
+            }
+        } else {
+             console.warn("[ChatManager] Title generation resulted in an empty title.");
+             return null;
+        }
+    } catch (error) {
+        console.error("[ChatManager] Error during centralized title generation:", error);
+        return null; // Return null on error
+    }
 } // Closes triggerTitleGeneration function
 
 function getCurrentChatId() {
@@ -389,6 +469,7 @@ async function loadChat(chatId) {
     currentChatId = chatId;
     activeModelInstance = null; // Clear previous instance
     currentPersonalityConfig = null;
+    currentReasoningContext = null; // Reset reasoning context on load
 
     // Determine personality to load - MUST be saved in chat file
     const personalityId = loaded.personalityId; // Assuming chatStorage saves this

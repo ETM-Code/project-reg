@@ -182,8 +182,14 @@ function initializeCustomDropdown(
     });
 
     // --- Initialization ---
-    populateOptions(); // Initial population
+    populateOptions(); // Initial population based on potentially empty select
     console.log(`CustomDropdown component initialized for container '${containerId}'.`);
+
+    // Listen for external updates to the hidden select's options
+    originalSelect.addEventListener('optionsUpdated', () => {
+        console.log(`CustomDropdown (${containerId}): Received 'optionsUpdated' event. Repopulating visual options.`);
+        populateOptions(); // Re-populate visual dropdown
+    });
 
     // Return API
     return {

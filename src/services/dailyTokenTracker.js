@@ -40,36 +40,42 @@ const readTodaysUsage = async () => {
     try {
         const data = await fs.readFile(filePath, 'utf-8');
         const usage = JSON.parse(data);
-        // Basic validation
-        if (typeof usage.input === 'number' && typeof usage.output === 'number' && typeof usage.total === 'number') {
-            return usage;
-        }
-        console.warn(`Invalid data found in ${filePath}, resetting.`);
-        return { input: 0, output: 0, total: 0 };
+        // Basic validation and initialization of reasoning field
+        const validatedUsage = {
+            input: typeof usage.input === 'number' ? usage.input : 0,
+            output: typeof usage.output === 'number' ? usage.output : 0,
+            total: typeof usage.total === 'number' ? usage.total : 0,
+            reasoning: typeof usage.reasoning === 'number' ? usage.reasoning : 0 // Initialize reasoning field
+        };
+        // Recalculate total just in case it was inconsistent
+        validatedUsage.total = validatedUsage.input + validatedUsage.output;
+        return validatedUsage;
     } catch (error) {
         if (error.code === 'ENOENT') {
             // File doesn't exist for today, which is normal
-            return { input: 0, output: 0, total: 0 };
+            return { input: 0, output: 0, total: 0, reasoning: 0 }; // Include reasoning field
         }
         console.error(`Error reading token usage file ${filePath}:`, error);
         // Return default on other errors to avoid breaking functionality
-        return { input: 0, output: 0, total: 0 };
+        return { input: 0, output: 0, total: 0, reasoning: 0 }; // Include reasoning field
     }
 };
 
-const updateTodaysUsage = async (inputTokens, outputTokens) => {
-    if (typeof inputTokens !== 'number' || typeof outputTokens !== 'number' || inputTokens < 0 || outputTokens < 0) {
-        console.error('Invalid token counts provided for update:', inputTokens, outputTokens);
+const updateTodaysUsage = async (inputTokens, outputTokens, reasoningTokens = 0) => { // Add optional reasoningTokens param
+    if (typeof inputTokens !== 'number' || typeof outputTokens !== 'number' || typeof reasoningTokens !== 'number' ||
+        inputTokens < 0 || outputTokens < 0 || reasoningTokens < 0) {
+        console.error('Invalid token counts provided for update:', inputTokens, outputTokens, reasoningTokens);
         return;
     }
     const usageDir = _getTokenUsageDir();
     await _ensureUsageDirExists(usageDir); // Ensure directory exists before writing
     const filePath = _getTodaysFilePath();
-    const currentUsage = await readTodaysUsage(); // readTodaysUsage now ensures dir exists
+    const currentUsage = await readTodaysUsage(); // readTodaysUsage now ensures dir exists and initializes reasoning
 
     currentUsage.input += inputTokens;
     currentUsage.output += outputTokens;
-    currentUsage.total = currentUsage.input + currentUsage.output;
+    currentUsage.reasoning += reasoningTokens; // Update reasoning count
+    currentUsage.total = currentUsage.input + currentUsage.output; // Total remains input + output
 
     try {
         await fs.writeFile(filePath, JSON.stringify(currentUsage, null, 2), 'utf-8');

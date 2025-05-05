@@ -1,3 +1,5 @@
+
+
 // src/renderer/components/settingsModal.js
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -17,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const customInstructionsTextarea = document.getElementById('customInstructionsTextarea');
   const savePersonalitySettingsBtn = document.getElementById('savePersonalitySettingsBtn');
   let currentEditingPersonalityId = null; // To store the ID of the personality being edited
+  let isModalOpen = false; // Explicit state variable for the modal
 
   // API Key Elements
   const openaiApiKeyInput = document.getElementById('openaiApiKeyInput');
@@ -24,9 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const geminiApiKeyInput = document.getElementById('geminiApiKeyInput');
   const saveGeminiApiKeyBtn = document.getElementById('saveGeminiApiKeyBtn');
 
+  // Model Settings Elements
+  const globalModelSelector = document.getElementById('globalModelSelector');
+  const reasoningEffortGroup = document.getElementById('reasoningEffortGroup');
+  const reasoningEffortSelector = document.getElementById('reasoningEffortSelector');
 
-  if (!settingsBtn || !settingsModal || !closeSettingsBtn || !themeSelector || !personalitySelectorContainer || !personalitySelector || !personalityDetailsContainer || !personalityDescription || !contextSetsContainer || !customInstructionsContainer || !customInstructionsTextarea || !savePersonalitySettingsBtn || !openaiApiKeyInput || !saveOpenaiApiKeyBtn || !geminiApiKeyInput || !saveGeminiApiKeyBtn) {
-    console.error("SettingsModal: One or more required UI elements not found (including API key elements).");
+
+  if (!settingsBtn || !settingsModal || !closeSettingsBtn || !themeSelector || !personalitySelectorContainer || !personalitySelector || !personalityDetailsContainer || !personalityDescription || !contextSetsContainer || !customInstructionsContainer || !customInstructionsTextarea || !savePersonalitySettingsBtn || !openaiApiKeyInput || !saveOpenaiApiKeyBtn || !geminiApiKeyInput || !saveGeminiApiKeyBtn || !globalModelSelector || !reasoningEffortGroup || !reasoningEffortSelector) {
+    console.error("SettingsModal: One or more required UI elements not found (including API key and Model elements).");
     // Be more specific in a real scenario about which element is missing
     return;
   }
@@ -134,26 +142,133 @@ document.addEventListener('DOMContentLoaded', () => {
       }
   };
 
+  // --- Model Settings Management ---
+
+  // Function to show/hide reasoning effort based on model ID
+  const updateReasoningEffortVisibility = (modelId) => {
+    // Simple check based on naming convention (adjust if needed)
+    const isReasoningModel = modelId && (modelId.startsWith('o4') || modelId.startsWith('o3'));
+    if (isReasoningModel) {
+      reasoningEffortGroup.classList.remove('hidden');
+      console.log(`[SettingsModal] Showing reasoning effort for model: ${modelId}`);
+    } else {
+      reasoningEffortGroup.classList.add('hidden');
+      console.log(`[SettingsModal] Hiding reasoning effort for model: ${modelId}`);
+    }
+  };
+
+  // Function to save a specific setting via IPC
+  const saveModelSetting = async (key, value) => {
+    console.log(`[SettingsModal] Attempting to save setting: ${key} = ${value}`);
+    if (window.electronAPI && window.electronAPI.invoke) {
+      try {
+        const result = await window.electronAPI.invoke('save-setting', { key, value });
+        if (result && result.success) {
+          console.log(`[SettingsModal] Setting saved successfully: ${key} = ${value}`);
+          // Optional: Add brief visual feedback if needed
+        } else {
+          console.error(`[SettingsModal] Failed to save setting ${key}:`, result?.error || 'Unknown error');
+          // Optional: Show error to user
+        }
+      } catch (error) {
+        console.error(`[SettingsModal] Error invoking save-setting for ${key}:`, error);
+        // Optional: Show error to user
+      }
+    } else {
+      console.error("[SettingsModal] electronAPI.invoke not available. Cannot save setting.");
+      // Optional: Show error to user
+    }
+  };
+
+
+  // Function to load model settings from main process
+  const loadModelSettings = async () => {
+    console.log("[SettingsModal] Requesting model settings...");
+    if (window.electronAPI && window.electronAPI.invoke) {
+      try {
+        // Assuming 'get-settings' returns { availableModels: [{id, name}], defaultModel, reasoningEffort }
+        const settings = await window.electronAPI.invoke('get-settings');
+        if (settings && !settings.error) {
+          console.log("[SettingsModal] Received settings:", settings);
+
+          // Populate Model Selector
+          globalModelSelector.innerHTML = ''; // Clear existing options (like "Loading...")
+          if (settings.availableModels && settings.availableModels.length > 0) {
+            settings.availableModels.forEach(model => {
+              const option = document.createElement('option');
+              option.value = model.id;
+              // Use name if available, otherwise fallback to id
+              option.textContent = model.name || model.id;
+              globalModelSelector.appendChild(option);
+            });
+          } else {
+             const option = document.createElement('option');
+             option.value = '';
+             option.textContent = 'No models available';
+             option.disabled = true;
+             globalModelSelector.appendChild(option);
+          }
+
+          // Set current selections
+          globalModelSelector.value = settings.defaultModel || '';
+          reasoningEffortSelector.value = settings.reasoningEffort || 'medium'; // Default to medium if not set
+
+          // Update visibility of reasoning effort dropdown
+          updateReasoningEffortVisibility(globalModelSelector.value);
+
+          console.log("[SettingsModal] Model settings loaded and UI updated.");
+
+        } else {
+          console.error("[SettingsModal] Failed to get model settings:", settings?.error || 'Unknown error');
+          globalModelSelector.innerHTML = '<option value="" disabled>Error loading models</option>';
+        }
+      } catch (error) {
+        console.error("[SettingsModal] Error invoking get-settings:", error);
+        globalModelSelector.innerHTML = '<option value="" disabled>Error loading models</option>';
+      }
+    } else {
+      console.error("[SettingsModal] electronAPI.invoke not available. Cannot load model settings.");
+      globalModelSelector.innerHTML = '<option value="" disabled>Error loading models</option>';
+    }
+  };
+
 
   // --- Event Listeners ---
 
-  // Open modal
+  // Toggle modal visibility using explicit state variable
   settingsBtn.addEventListener('click', () => {
-    console.log('[SettingsModal] settingsBtn clicked!'); // Log 1: Handler entry
-    console.log('[SettingsModal] Target modal element:', settingsModal); // Log 2: Log the element
-    console.log('[SettingsModal] Class list BEFORE toggle:', settingsModal.classList.toString()); // Log 3: Before toggle
-    settingsModal.classList.toggle('open'); // Use toggle as originally intended
-    console.log('[SettingsModal] Class list AFTER toggle:', settingsModal.classList.toString()); // Log 4: After toggle
-    console.log(`[SettingsModal] Modal should now be ${settingsModal.classList.contains('open') ? 'open' : 'closed'}.`); // Log 5: State check
-    if (settingsModal.classList.contains('open')) {
-        loadApiKeys(); // Load keys only when modal is opened
+    console.log('[SettingsModal] settingsBtn clicked!');
+    const currentModalElement = document.getElementById('settingsModal'); // Still need reference to modify
+    if (!currentModalElement) {
+        console.error('[SettingsModal] Could not find #settingsModal element inside click handler!');
+        return;
     }
+
+    if (isModalOpen) {
+      // If state is open, close it
+      currentModalElement.classList.remove('open');
+      isModalOpen = false;
+      console.log('[SettingsModal] State was open, now closing. isModalOpen =', isModalOpen);
+    } else {
+      // If state is closed, open it and load data
+      currentModalElement.classList.add('open');
+      isModalOpen = true;
+      console.log('[SettingsModal] State was closed, now opening. isModalOpen =', isModalOpen);
+      // Load data only when opening
+      loadApiKeys();
+      loadModelSettings();
+    }
+     console.log(`[SettingsModal] Modal final state based on variable: ${isModalOpen ? 'open' : 'closed'}.`);
   });
 
-  // Close modal
+  // Close modal function - MUST also update the state variable
   const closeModal = () => {
-      settingsModal.classList.remove('open'); // Remove 'open' class to hide and transition out
-      console.log('[SettingsModal] "open" class removed.');
+      const currentModalElement = document.getElementById('settingsModal'); // Get fresh reference
+      if (currentModalElement) {
+          currentModalElement.classList.remove('open'); // Remove 'open' class to hide and transition out
+      }
+      isModalOpen = false; // Update state variable
+      console.log('[SettingsModal] closeModal called. isModalOpen =', isModalOpen);
   }
   // Add listener to the dedicated close button in the header/footer
   closeSettingsBtn.addEventListener('click', closeModal);
@@ -180,8 +295,27 @@ document.addEventListener('DOMContentLoaded', () => {
     applyTheme(event.target.value);
   });
 
+  // Change Default Model
+  globalModelSelector.addEventListener('change', (event) => {
+    const selectedModelId = event.target.value;
+    console.log(`[SettingsModal] Default model changed to: ${selectedModelId}`);
+    updateReasoningEffortVisibility(selectedModelId);
+    saveModelSetting('defaultModel', selectedModelId);
+    // If the selected model is NOT a reasoning model, maybe save the default effort? Or leave it as is?
+    // Let's leave it for now, it only applies when a reasoning model is active.
+  });
+
+  // Change Reasoning Effort
+  reasoningEffortSelector.addEventListener('change', (event) => {
+    const selectedEffort = event.target.value;
+    console.log(`[SettingsModal] Reasoning effort changed to: ${selectedEffort}`);
+    saveModelSetting('reasoningEffort', selectedEffort);
+  });
+
+
   // --- Initial Load ---
   loadSavedTheme();
+  // Don't load model settings here, wait for modal open
 
   // --- Personality Settings Logic ---
 
