@@ -280,7 +280,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [ ] Advanced analytics and insights
 - [ ] Mobile companion app
 - [ ] Collaborative features
-- [ ] Advanced context search and filtering
+- [ ] Advanced productivity tools
 
 ---
 
