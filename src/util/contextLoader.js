@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const settingsManager = require('../config/settingsManager'); // Import settingsManager
 const { loadNotes } = require('../util/notesLoader'); // Import notes loader
+const { app } = require('electron'); // Import app
 
 const CONTEXT_SEPARATOR = "\n\n---\n\n"; // Define a clear separator
 
@@ -19,7 +20,7 @@ function loadContextFromIds(contextSetIds) {
   }
 
   let combinedContext = '';
-  const projectRoot = path.join(__dirname, '..', '..'); // Project root relative to src/util
+  const appRoot = app.getAppPath(); // Use app root path
 
   try {
     contextSetIds.forEach(id => {
@@ -47,7 +48,9 @@ function loadContextFromIds(contextSetIds) {
 
         let setContent = '';
         contextSetConfig.paths.forEach(relativePath => {
-          const absoluteContextPath = path.resolve(projectRoot, relativePath);
+          // Resolve context file paths relative to the application root
+          // relativePath is like "src/context/myContext.md"
+          const absoluteContextPath = path.resolve(appRoot, relativePath);
           console.log(`[contextLoader] Attempting to load context file: ${absoluteContextPath} for set ID: ${id}`);
 
           try {

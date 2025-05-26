@@ -1,6 +1,11 @@
 /* src/renderer/css/themes.css - Color theme definitions */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
 
 :root {
+  /* Font Family */
+  --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+
   /* Default Theme (Enhanced) */
   --primary-color: #4f46e5;      /* Indigo 600 */
   --primary-gradient: linear-gradient(to right, #4f46e5, #6366f1); /* Indigo 600 to 500 */
@@ -32,6 +37,20 @@
   --scrollbar-track-color: var(--secondary-color);
   --border-color-soft: #e5e7eb; /* Gray 200 */
   --shadow-color: rgba(0, 0, 0, 0.05);
+
+  /* Timer and Alarm Colors - Default Theme */
+  --timer-bg-color: #ebf8ff; /* blue-50 */
+  --timer-border-color: #90cdf4; /* blue-300 */
+  --alarm-bg-color: #fffaf0; /* orange-50 */
+  --alarm-border-color: #fbd38d; /* orange-300 */
+  --info-alert-bg-color: #ebf8ff; /* blue-50 */
+  --info-alert-border-color: #90cdf4; /* blue-300 */
+  --warning-alert-bg-color: #fffaf0; /* orange-50 */
+  --warning-alert-border-color: #fbd38d; /* orange-300 */
+}
+
+body {
+  font-family: var(--font-family-base);
 }
 
 body.theme-dark {
@@ -66,6 +85,16 @@ body.theme-dark {
   --scrollbar-track-color: #374151; /* Gray 700 */
   --border-color-soft: #374151; /* Gray 700 */
   --shadow-color: rgba(0, 0, 0, 0.2);
+
+  /* Timer and Alarm Colors - Dark Theme */
+  --timer-bg-color-dark: #2c5282; /* blue-800 */
+  --timer-border-color-dark: #4a5568; /* blue-600 (adjusted) */
+  --alarm-bg-color-dark: #7b341e; /* orange-800 */
+  --alarm-border-color-dark: #975a16; /* orange-600 (adjusted) */
+  --info-alert-bg-color-dark: #1a365d; /* blue-900 */
+  --info-alert-border-color-dark: #2c5282; /* blue-700 */
+  --warning-alert-bg-color-dark: #652b19; /* orange-900 */
+  --warning-alert-border-color-dark: #7b341e; /* orange-700 */
 }
 
 body.theme-light {
@@ -100,6 +129,16 @@ body.theme-light {
    --scrollbar-track-color: var(--secondary-color);
    --border-color-soft: #f3f4f6; /* Gray 100 */
    --shadow-color: rgba(0, 0, 0, 0.03);
+
+  /* Timer and Alarm Colors - Light Theme (can be same as default or adjusted) */
+  --timer-bg-color: #e0f2fe; /* lighter blue-50 variant */
+  --timer-border-color: #7dd3fc; /* lighter blue-300 variant */
+  --alarm-bg-color: #fffbeb; /* lighter orange-50 variant */
+  --alarm-border-color: #fde68a; /* lighter orange-300 variant */
+  --info-alert-bg-color: #e0f2fe;
+  --info-alert-border-color: #7dd3fc;
+  --warning-alert-bg-color: #fffbeb;
+  --warning-alert-border-color: #fde68a;
 }
 
 /* Basic Scrollbar Styling */
@@ -121,4 +160,43 @@ body.theme-light {
 }
 ::-webkit-scrollbar-corner {
   background: transparent; /* Hide bottom-right corner */
+}
+/* Window Controls Styling */
+.window-control-btn {
+  -webkit-app-region: no-drag; /* Ensure buttons are clickable */
+  padding: 0.5rem; /* Adjust padding as needed */
+  border-radius: 0.25rem; /* Rounded corners */
+  transition: background-color 0.2s ease-in-out;
+  color: var(--header-text-color); /* Use header text color */
+  background-color: transparent; /* Transparent background by default */
+  border: none; /* No border by default */
+  font-size: 0.875rem; /* Adjust icon size if needed */
+  line-height: 1; /* Ensure icon is centered */
+}
+
+.window-control-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2); /* Lighten on hover, adjust as needed */
+}
+
+.window-control-btn-close:hover {
+  background-color: #e81123; /* Standard red for close button hover */
+  color: white; /* Ensure icon is visible on red background */
+}
+
+.window-control-btn i {
+  display: block; /* Helps with centering if needed */
+}
+
+/* Specific styling for dark theme window controls if needed */
+body.theme-dark .window-control-btn {
+  color: var(--header-text-color); /* Ensure contrast in dark mode */
+}
+
+body.theme-dark .window-control-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1); /* Slightly different hover for dark mode */
+}
+
+body.theme-dark .window-control-btn-close:hover {
+  background-color: #e81123;
+  color: white;
 }

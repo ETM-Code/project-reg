@@ -1,32 +1,47 @@
 const { loadConfig } = require('./configLoader');
 const path = require('path');
 const fs = require('fs').promises; // Added for file writing
+const fsSync = require('fs'); // For synchronous operations
 const { app } = require('electron'); // Import app
+const pathManager = require('../util/pathManager');
 
-// Define config path relative to the app's root path
-const CONFIG_FILE_PATH = path.join(app.getAppPath(), 'config.json');
+// Use path manager for config file location
+const CONFIG_FILE_PATH = pathManager.getConfigPath();
 
 let config = null;
 let initializationPromise = null;
 
 /**
- * Initializes the SettingsManager by loading the configuration.
- * Should be called once at application startup.
+ * Initializes the configuration by reading from the config file.
  * @returns {Promise<void>}
  */
 async function initializeSettings() {
-  if (!initializationPromise) {
-    initializationPromise = loadConfig().then(loadedConfig => {
-      config = loadedConfig;
-      console.log('SettingsManager initialized.');
-    }).catch(error => {
-      console.error('Failed to initialize SettingsManager:', error);
-      // Prevent further attempts if initialization fails critically
-      initializationPromise = Promise.reject(error); 
-      throw error; // Re-throw to signal failure upstream
-    });
-  }
-  return initializationPromise;
+    try {
+        console.log(`[SettingsManager] Initializing settings from: ${CONFIG_FILE_PATH}`);
+        
+        // Check if config file exists
+        if (!fsSync.existsSync(CONFIG_FILE_PATH)) {
+            throw new Error(`Configuration file not found: ${CONFIG_FILE_PATH}`);
+        }
+
+        // Read and parse config file
+        const configData = await fs.readFile(CONFIG_FILE_PATH, 'utf8');
+        config = JSON.parse(configData);
+        
+        // Validate required sections
+        if (!config.availableModels || !Array.isArray(config.availableModels)) {
+            throw new Error('Invalid configuration: availableModels is missing or not an array');
+        }
+        if (!config.personalities || !Array.isArray(config.personalities)) {
+            throw new Error('Invalid configuration: personalities is missing or not an array');
+        }
+        
+        console.log('[SettingsManager] Settings initialized successfully');
+        console.log(`[SettingsManager] Loaded ${config.availableModels.length} models and ${config.personalities.length} personalities`);
+    } catch (error) {
+        console.error('[SettingsManager] Failed to initialize settings:', error);
+        throw error;
+    }
 }
 
 /**
@@ -43,12 +58,32 @@ function ensureInitialized() {
 
 function getPaths() {
   ensureInitialized();
-  // Resolve relative paths from config.json to be absolute based on the app's root path
   const appRoot = app.getAppPath();
+  const userDataPath = app.getPath('userData');
   const resolvedPaths = {};
+
+  // Define which path keys point to user data vs. app resources
+  const userDataKeys = ['chats', 'chatVersions', 'tokenUsage', 'notesFile', 'archivedNotesFile', 'eventsFile', 'finishedEventsFile', 'monthlyCreditsFile'];
+  const appResourceKeys = ['promptsDir', 'contextDir']; // Add other resource keys if any
+
   for (const key in config.paths) {
-    resolvedPaths[key] = path.resolve(appRoot, config.paths[key]);
+    const originalPath = config.paths[key];
+    if (userDataKeys.includes(key)) {
+      // Resolve user data paths relative to userDataPath/data
+      // Note: dataInitializer already creates the 'data' subfolder
+      resolvedPaths[key] = path.resolve(userDataPath, originalPath);
+    } else if (appResourceKeys.includes(key)) {
+      // Resolve app resource paths relative to appRoot
+      resolvedPaths[key] = path.resolve(appRoot, originalPath);
+    } else {
+      // Default or unknown paths - resolve relative to appRoot for safety, but log a warning
+      console.warn(`[SettingsManager] Path key '${key}' not explicitly defined as user data or app resource. Resolving relative to app root.`);
+      resolvedPaths[key] = path.resolve(appRoot, originalPath);
+    }
   }
+  // Ensure the base data directory path is also available if needed elsewhere
+  resolvedPaths['baseDataDir'] = path.join(userDataPath, 'data');
+  
   return resolvedPaths;
 }
 
@@ -116,6 +151,72 @@ function getModelById(modelId) {
     ensureInitialized();
     const models = getAvailableModels();
     return models.find(m => m.id === modelId);
+}
+
+// --- Font Settings ---
+
+/**
+ * Gets the font settings object from the configuration.
+ * @returns {object | undefined} The font settings object.
+ */
+function getFontSettings() {
+  ensureInitialized();
+  const settings = config.fontSettings || {};
+  return {
+    defaultFont: settings.defaultFont || "System Default",
+    availableFonts: Array.isArray(settings.availableFonts) ? settings.availableFonts : []
+  };
+}
+
+/**
+ * Gets the list of available fonts.
+ * @returns {Array<object>} An array of available font objects.
+ */
+function getAvailableFonts() {
+    const fontSettings = getFontSettings();
+    return fontSettings.availableFonts || [];
+}
+
+/**
+ * Gets the default font name.
+ * @returns {string} The name of the default font.
+ */
+function getDefaultFont() {
+    const fontSettings = getFontSettings();
+    // Ensure there's a fallback if defaultFont is somehow missing
+    return fontSettings.defaultFont || "System Default";
+}
+
+/**
+ * Saves the default font to config.json.
+ * @param {string} fontName The name of the font to set as default.
+ * @returns {Promise<void>}
+ */
+async function saveDefaultFont(fontName) {
+    ensureInitialized();
+    console.log(`[SettingsManager] Attempting to save default font: ${fontName}`);
+
+    if (!config.fontSettings) {
+        config.fontSettings = { defaultFont: "System Default", availableFonts: [] };
+        console.warn("[SettingsManager] Initialized missing fontSettings object in config.");
+    }
+
+    const availableFonts = getAvailableFonts();
+    if (!availableFonts.find(font => font.name === fontName)) {
+        console.error(`[SettingsManager] Font "${fontName}" is not in the list of available fonts. Default font not saved.`);
+        throw new Error(`Font "${fontName}" is not an available font.`);
+    }
+
+    config.fontSettings.defaultFont = fontName;
+
+    try {
+        const configString = JSON.stringify(config, null, 2);
+        await fs.writeFile(CONFIG_FILE_PATH, configString, 'utf8');
+        console.log(`[SettingsManager] Successfully wrote updated config to ${CONFIG_FILE_PATH} after saving default font.`);
+    } catch (error) {
+        console.error(`[SettingsManager] Error writing config file while saving default font: ${error}`);
+        throw new Error(`Failed to save default font configuration changes: ${error.message}`);
+    }
 }
 
 // --- Functions for Managing Settings (Placeholders) ---
@@ -241,8 +342,24 @@ async function savePersonalityOverrides(personalityId, updatedSettings) {
 }
 
 /**
- * Saves a specific global setting (like defaultModel or reasoningEffort) to config.json.
- * @param {'defaultModel' | 'reasoningEffort'} key The setting key to update within the 'defaults' object.
+ * Gets a specific global setting value from the configuration.
+ * @param {string} key The setting key to retrieve from the 'defaults' object.
+ * @returns {string | undefined} The value for the setting, or undefined if not found.
+ */
+function getGlobalSetting(key) {
+    ensureInitialized();
+    
+    if (!config.defaults) {
+        console.warn("[SettingsManager] No defaults object found in config for getGlobalSetting.");
+        return undefined;
+    }
+    
+    return config.defaults[key];
+}
+
+/**
+ * Saves a specific global setting to config.json.
+ * @param {string} key The setting key to update within the 'defaults' object.
  * @param {string} value The new value for the setting.
  * @returns {Promise<void>}
  */
@@ -253,12 +370,14 @@ async function saveGlobalSetting(key, value) {
 
     if (!config.defaults) {
         // Initialize defaults object if it doesn't exist (shouldn't happen with current config.json)
-        config.defaults = { defaultModel: "", reasoningEffort: "medium" }; // Provide sensible defaults
+        config.defaults = { defaultModel: "", reasoningEffort: "medium", theme: "dark" }; // Provide sensible defaults
         console.warn("[SettingsManager] Initialized missing defaults object in config.");
     }
 
-    if (key !== 'defaultModel' && key !== 'reasoningEffort') {
-        throw new Error(`Invalid global setting key specified: ${key}. Must be 'defaultModel' or 'reasoningEffort'.`);
+    // Allow more setting keys beyond just defaultModel and reasoningEffort
+    const allowedKeys = ['defaultModel', 'reasoningEffort', 'theme'];
+    if (!allowedKeys.includes(key)) {
+        throw new Error(`Invalid global setting key specified: ${key}. Must be one of: ${allowedKeys.join(', ')}`);
     }
 
     // Update the key in the config object in memory
@@ -276,6 +395,89 @@ async function saveGlobalSetting(key, value) {
     }
 }
 
+/**
+ * Saves the personalities array to config.json.
+ * @param {Array<object>} personalities The personalities array to save.
+ * @returns {Promise<void>}
+ */
+async function savePersonalities(personalities) {
+    ensureInitialized();
+    
+    console.log(`[SettingsManager] Attempting to save ${personalities.length} personalities`);
+    
+    if (!Array.isArray(personalities)) {
+        throw new Error('Invalid personalities data - expected an array.');
+    }
+    
+    // Update the personalities in the config object in memory
+    config.personalities = personalities;
+    
+    // Write the entire updated config object back to the file
+    try {
+        const configString = JSON.stringify(config, null, 2);
+        await fs.writeFile(CONFIG_FILE_PATH, configString, 'utf8');
+        console.log(`[SettingsManager] Successfully saved personalities to config`);
+    } catch (error) {
+        console.error(`[SettingsManager] Error writing config file while saving personalities:`, error);
+        throw new Error(`Failed to save personalities: ${error.message}`);
+    }
+}
+
+/**
+ * Saves the prompts array to config.json.
+ * @param {Array<object>} prompts The prompts array to save.
+ * @returns {Promise<void>}
+ */
+async function savePrompts(prompts) {
+    ensureInitialized();
+    
+    console.log(`[SettingsManager] Attempting to save ${prompts.length} prompts`);
+    
+    if (!Array.isArray(prompts)) {
+        throw new Error('Invalid prompts data - expected an array.');
+    }
+    
+    // Update the prompts in the config object in memory
+    config.prompts = prompts;
+    
+    // Write the entire updated config object back to the file
+    try {
+        const configString = JSON.stringify(config, null, 2);
+        await fs.writeFile(CONFIG_FILE_PATH, configString, 'utf8');
+        console.log(`[SettingsManager] Successfully saved ${prompts.length} prompts to config.json`);
+    } catch (error) {
+        console.error('[SettingsManager] Error saving prompts to config.json:', error);
+        throw error;
+    }
+}
+
+/**
+ * Saves the context sets array to config.json.
+ * @param {Array<object>} contextSets The context sets array to save.
+ * @returns {Promise<void>}
+ */
+async function saveContextSets(contextSets) {
+    ensureInitialized();
+    
+    console.log(`[SettingsManager] Attempting to save ${contextSets.length} context sets`);
+    
+    if (!Array.isArray(contextSets)) {
+        throw new Error('Invalid context sets data - expected an array.');
+    }
+    
+    // Update the context sets in the config object in memory
+    config.contextSets = contextSets;
+    
+    // Write the entire updated config object back to the file
+    try {
+        const configString = JSON.stringify(config, null, 2);
+        await fs.writeFile(CONFIG_FILE_PATH, configString, 'utf8');
+        console.log(`[SettingsManager] Successfully saved ${contextSets.length} context sets to config.json`);
+    } catch (error) {
+        console.error('[SettingsManager] Error saving context sets to config.json:', error);
+        throw error;
+    }
+}
 
 module.exports = {
  initializeSettings,
@@ -290,8 +492,16 @@ module.exports = {
   getContextSetById,
   getAvailableModels, // Export new function
   getModelById, // Export new function
- savePersonalityOverrides,
- saveApiKey,
- saveGlobalSetting, // Export the new function
- // saveSettings, // Export when implemented
+  getFontSettings, // Export new function
+  getAvailableFonts, // Export new function
+  getDefaultFont, // Export new function
+  saveDefaultFont, // Export new function
+  savePersonalityOverrides,
+  saveApiKey,
+  getGlobalSetting, // Export the new function
+  saveGlobalSetting, // Export the new function
+  savePersonalities, // Export new function
+  savePrompts, // Export new function
+  saveContextSets, // Export new function
+  // saveSettings, // Export when implemented
 };

@@ -3,11 +3,12 @@ require('dotenv').config();
 // main.js - Main process entry point with unified chat manager, GPT and Gemini streaming with integrated tool calling
 
 require('./dataInitializer');
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification } = require('electron'); // Added Notification
 const path = require('path');
+const pathManager = require('./src/util/pathManager'); // Initialize path manager first
 const chatManager = require('./src/models/chatManager');
 const { setupIpcHandlers } = require('./src/main/ipc'); // Import the setup function
-const actionsManager = require('./src/actions/ActionsManager'); // Import ActionsManager
+// actionsManager is used by chatManager, no need to import here directly unless for other purposes.
 const { countTokens, cleanupEncoders } = require('./src/util/tiktokenCounter'); // Import tiktoken counter
 const dailyTokenTracker = require('./src/services/dailyTokenTracker'); // Import the token tracker
 const chatStorage = require('./src/services/chatStorage'); // Import chatStorage
@@ -21,6 +22,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200, // Added width back
     height: 800,
+    frame: false, // Added to remove the top bar
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -28,6 +30,25 @@ function createWindow() {
     },
   });
   mainWindow.loadFile(path.join(__dirname, 'src/renderer/index.html'));
+
+  // Send initial maximized state
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (mainWindow) { // Ensure mainWindow still exists
+      mainWindow.webContents.send('window-maximized-status', mainWindow.isMaximized());
+    }
+  });
+
+  // Listen for maximize and unmaximize events to update renderer
+  mainWindow.on('maximize', () => {
+    if (mainWindow) { // Ensure mainWindow still exists
+      mainWindow.webContents.send('window-maximized-status', true);
+    }
+  });
+  mainWindow.on('unmaximize', () => {
+    if (mainWindow) { // Ensure mainWindow still exists
+      mainWindow.webContents.send('window-maximized-status', false);
+    }
+  });
 }
 
 app.whenReady().then(async () => { // Make async
@@ -58,6 +79,31 @@ app.whenReady().then(async () => { // Make async
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
+
+    // Listen for title updates from chatStorage (e.g., after batch generation)
+    if (chatStorage && chatStorage.emitter) {
+      chatStorage.emitter.on('title-updated', ({ chatId, newTitle, lastUpdated, modelId, personalityId }) => {
+        if (mainWindow) {
+          console.log(`[Main] Forwarding title-updated event from chatStorage to renderer for chat ${chatId}: "${newTitle}"`);
+          // The renderer's onTitleUpdate expects (chatId, newTitle)
+          // We can also send lastUpdated if the renderer wants to refresh that too.
+          mainWindow.webContents.send('title-updated', { chatId, newTitle, lastUpdated });
+        }
+      });
+    } else {
+        console.error("[Main] chatStorage or chatStorage.emitter not available to set up 'title-updated' listener.");
+    }
+
+    // Call batch title generation on startup
+    // Ensure chatManager is fully initialized before calling this
+    if (chatManager.batchCheckAndGenerateTitles) {
+        console.log("[Main] Triggering batchCheckAndGenerateTitles on startup.");
+        // No need to await this, let it run in the background
+        chatManager.batchCheckAndGenerateTitles().catch(err => {
+            console.error("[Main] Error during initial batchCheckAndGenerateTitles:", err);
+        });
+    }
+
 
   } catch (error) {
     console.error("Fatal Error during application startup:", error);
@@ -227,19 +273,42 @@ ipcMain.on('chatMessage', async (event, data) => {
                 parsedArgs = toolCall.arguments; // Assume object (from Gemini)
             }
 
-            // Convert snake_case tool name from model to camelCase for ActionsManager
-            const actionName = toolName.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-            console.log(`[main] Executing action '${actionName}' for tool '${toolName}' with args:`, parsedArgs);
-            const result = await actionsManager.execute(actionName, parsedArgs);
-            console.log(`[main] Tool '${toolName}' executed. Result:`, result);
-            // Append tool result to history using the standardized function
-            chatManager.appendToolResponseMessage(toolCallId, toolName, result);
+            // toolName is already the schema_name (e.g., "create_notification")
+            // chatManager.executeToolAndAppendResponse handles calling actionsManager.execute
+            // and appending the response.
+            console.log(`[main] Requesting execution for tool '${toolName}' (ID: ${toolCall.id}) with args:`, parsedArgs);
+
+            const toolExecutionResult = await chatManager.executeToolAndAppendResponse(
+                toolCall.id, // Pass the original tool call ID
+                toolName,    // Pass the schema_name
+                parsedArgs
+            );
+
+            console.log(`[main] Tool '${toolName}' execution processed by chatManager. Result:`, toolExecutionResult);
+
+            // Send the result to the renderer so it can handle UI side effects (e.g., showing native notification)
+            if (mainWindow) {
+                mainWindow.webContents.send('tool-execution-result', {
+                    toolName: toolName, // schema_name
+                    result: toolExecutionResult, // { success: boolean, data?: any, error?: string, message?: string }
+                    chatIdFromMain: chatManager.getCurrentChatId() // Send current chat ID for context
+                });
+            }
 
           } catch (err) {
-            console.error(`[main] Error executing tool '${toolName || 'unknown'}':`, err);
-            const errorResult = { error: `Failed to execute tool ${toolName}: ${err.message}` };
-            // Append error message as tool result
-            chatManager.appendToolResponseMessage(toolCallId, toolName, errorResult);
+            console.error(`[main] Error parsing arguments or initiating tool execution for '${toolName || 'unknown'}':`, err);
+            const errorResult = { success: false, error: `Failed to process tool ${toolName}: ${err.message}` };
+            if (toolCall && toolCall.id && toolName) {
+                 chatManager.appendToolResponseMessage(toolCall.id, toolName, errorResult);
+            }
+            // Also send this error to renderer if it's a setup/parsing error before tool execution
+            if (mainWindow) {
+                mainWindow.webContents.send('tool-execution-result', {
+                    toolName: toolName || 'unknown_tool',
+                    result: errorResult,
+                    chatIdFromMain: chatManager.getCurrentChatId()
+                });
+            }
           }
         }
         // Re-prompt the model
@@ -338,6 +407,30 @@ app.on('will-quit', () => {
 ipcMain.handle('get-initial-token-usage', async () => {
   return await dailyTokenTracker.getInitialUsage();
 });
+
+// --- IPC for Native Notifications ---
+ipcMain.on('show-native-notification', (event, data) => {
+  const { title, body, chatId } = data;
+  if (!mainWindow) {
+    console.error("[Main] Cannot show notification, mainWindow is not available.");
+    return;
+  }
+  if (Notification.isSupported()) {
+    const notification = new Notification({ title, body });
+    notification.on('click', () => {
+      console.log(`[Main] Native notification clicked for chat ID: ${chatId}`);
+      mainWindow.webContents.send('native-notification-clicked', chatId);
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    });
+    notification.show();
+  } else {
+    console.warn("[Main] Native notifications not supported on this system.");
+    // Optionally, send a fallback message to the renderer to display an in-app notification
+    mainWindow.webContents.send('show-in-app-notification-fallback', { title, body, chatId });
+  }
+});
+
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

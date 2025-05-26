@@ -78,14 +78,14 @@ class GPTChat extends AIModelInterface {
         messages.push({ role: "user", content: msg.parts[0].text });
       } else if (msg.role === "model") {
         // Check if the model message includes tool_calls (GPT format)
-        if (msg.tool_calls && msg.tool_calls.length > 0) {
-          messages.push({ role: "assistant", content: msg.parts[0].text || null, tool_calls: msg.tool_calls }); // content can be null if only tool calls
+        if (msg.rawToolData && msg.rawToolData.length > 0) { // Check msg.rawToolData
+          messages.push({ role: "assistant", content: msg.parts[0].text || null, tool_calls: msg.rawToolData }); // Use msg.rawToolData
         } else {
           messages.push({ role: "assistant", content: msg.parts[0].text });
         }
       } else if (msg.role === "tool") {
         // Add tool responses to the history for GPT
-        messages.push({ role: "tool", tool_call_id: msg.tool_call_id, name: msg.name, content: JSON.stringify(msg.content) }); // Ensure content is stringified
+        messages.push({ role: "tool", tool_call_id: msg.toolCallId, name: msg.name, content: JSON.stringify(msg.content) }); // Use msg.toolCallId for the value
       }
     }
     return messages;

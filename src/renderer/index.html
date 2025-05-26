@@ -19,8 +19,9 @@
   <script src="https://unpkg.com/swiper/swiper-bundle.min.js"></script>
 </head>
 <body class="bg-[var(--background-color)] text-[var(--foreground-color)]">
+  
   <!-- Expanded Input Overlay - MOVED HERE -->
-  <div id="inputOverlay" class="fixed inset-0 bg-[var(--overlay-bg-color)] z-50 opacity-0 invisible transition-all duration-300 ease-in-out" style="--overlay-bg-color: rgba(0, 0, 0, 0.5); z-index: 1000; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none;"> <!-- DIAGNOSTIC: Removed flex centering, kept explicit position/size -->
+  <div id="inputOverlay" class="fixed inset-0 bg-[var(--overlay-bg-color)] z-500 opacity-0 invisible transition-all duration-300 ease-in-out" style="--overlay-bg-color: rgba(0, 0, 0, 0.5); z-index: 1000; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none;"> <!-- DIAGNOSTIC: Removed flex centering, kept explicit position/size -->
     <div id="inputOverlayBackdrop" class="absolute inset-0 backdrop-blur-sm transition-opacity duration-300 ease-in-out opacity-0"></div> <!-- Backdrop for blur -->
     <!-- DIAGNOSTIC: Removed most layout/sizing/transform classes -->
     <div id="expandedInputContainer" class="relative bg-[var(--content-bg-color)] p-6 rounded-lg shadow-xl">
@@ -34,7 +35,7 @@
         <div class="relative flex-grow flex flex-col"> <!-- Added flex container -->
           <textarea
             id="expandedUserInput"
-            class="textarea-base flex-grow"
+            class="textarea-base flex-grow custom-scrollbar"
             rows="10"
             placeholder="Type your message (Shift+Enter for newline, Enter to send)..."
             style="min-height: 150px; height: 60vh; overflow-y: auto; padding-right: 0.5rem;"
@@ -54,21 +55,132 @@
   </div>
   <!-- END Expanded Input Overlay -->
 
+  <!-- Settings Modal - MOVED OUTSIDE MAIN CONTAINER -->
+  <div id="settingsModal" class="fixed inset-0 bg-black bg-opacity-50 z-50" style="display: none; z-index: 999999 !important;">
+      <div class="flex items-center justify-center min-h-screen p-4">
+          <div class="bg-[var(--content-bg-color)] rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden" style="z-index: 999999 !important; position: relative;">
+
+              <!-- Modal Header -->
+              <div class="flex items-center justify-between p-6 border-b border-[var(--border-color-soft)]">
+                  <h2 id="settingsModalTitle" class="text-xl font-semibold text-[var(--foreground-color)]">Settings</h2>
+                  <button id="closeSettingsBtn" class="text-[var(--foreground-color-muted)] hover:text-[var(--foreground-color)] p-1" aria-label="Close settings">
+                      <i class="fas fa-times text-lg"></i>
+                  </button>
+              </div>
+
+              <!-- Modal Body (Scrollable) -->
+              <div class="p-6 overflow-y-auto max-h-[70vh] custom-scrollbar">
+
+                  <!-- General Settings Section -->
+                  <div class="mb-6">
+                      <h3 class="text-lg font-medium text-[var(--foreground-color)] mb-4">General</h3>
+                      <div class="space-y-4">
+                          <div>
+                              <label for="themeSelector" class="block text-sm font-medium text-[var(--foreground-color)] mb-2">Color Theme</label>
+                              <select id="themeSelector" class="w-full px-3 py-2 border border-[var(--input-border-color)] rounded-md bg-[var(--input-bg-color)] text-[var(--foreground-color)] focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent">
+                                  <option value="default">Default</option>
+                                  <option value="light">Light</option>
+                                  <option value="dark">Dark</option>
+                              </select>
+                          </div>
+                          <div>
+                              <label for="font-selector" class="block text-sm font-medium text-[var(--foreground-color)] mb-2">Application Font</label>
+                              <select id="font-selector" class="w-full px-3 py-2 border border-[var(--input-border-color)] rounded-md bg-[var(--input-bg-color)] text-[var(--foreground-color)] focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent">
+                                  <!-- Options populated by settingsModal.js -->
+                                  <option value="">Loading fonts...</option>
+                              </select>
+                          </div>
+                      </div>
+                  </div>
+
+                  <!-- Model Settings Section -->
+                  <div class="mb-6">
+                      <h3 class="text-lg font-medium text-[var(--foreground-color)] mb-4">Model Settings</h3>
+                      <div class="space-y-4">
+                          <div>
+                              <label for="globalModelSelector" class="block text-sm font-medium text-[var(--foreground-color)] mb-2">Default AI Model</label>
+                              <select id="globalModelSelector" class="w-full px-3 py-2 border border-[var(--input-border-color)] rounded-md bg-[var(--input-bg-color)] text-[var(--foreground-color)] focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent">
+                                  <!-- Options populated by settingsModal.js -->
+                                  <option value="">Loading models...</option>
+                              </select>
+                          </div>
+                          <div id="reasoningEffortGroup" style="display: none;"> <!-- Hidden by default -->
+                              <label for="reasoningEffortSelector" class="block text-sm font-medium text-[var(--foreground-color)] mb-2">Reasoning Effort</label>
+                              <select id="reasoningEffortSelector" class="w-full px-3 py-2 border border-[var(--input-border-color)] rounded-md bg-[var(--input-bg-color)] text-[var(--foreground-color)] focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent">
+                                  <option value="low">Low</option>
+                                  <option value="medium" selected>Medium</option> <!-- Default -->
+                                  <option value="high">High</option>
+                              </select>
+                              <p class="text-xs text-[var(--foreground-color-muted)] mt-1">Applies only to reasoning models (e.g., o4-mini).</p>
+                          </div>
+                      </div>
+                  </div>
+
+                  <!-- API Keys Section -->
+                  <div class="mb-6">
+                      <h3 class="text-lg font-medium text-[var(--foreground-color)] mb-4">API Keys</h3>
+                      <div class="space-y-4">
+                          <div>
+                              <label for="openaiApiKeyInput" class="block text-sm font-medium text-[var(--foreground-color)] mb-2">OpenAI API Key</label>
+                              <div class="flex items-center space-x-2">
+                                  <input type="password" id="openaiApiKeyInput" class="flex-grow px-3 py-2 border border-[var(--input-border-color)] rounded-md bg-[var(--input-bg-color)] text-[var(--foreground-color)] focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent" placeholder="Enter your OpenAI key">
+                                  <button id="saveOpenaiApiKeyBtn" class="px-3 py-2 bg-[var(--secondary-color)] text-[var(--foreground-color)] rounded-md hover:bg-[var(--chat-list-hover-bg)] text-sm">Save</button>
+                              </div>
+                          </div>
+                          <div>
+                              <label for="geminiApiKeyInput" class="block text-sm font-medium text-[var(--foreground-color)] mb-2">Gemini API Key</label>
+                              <div class="flex items-center space-x-2">
+                                  <input type="password" id="geminiApiKeyInput" class="flex-grow px-3 py-2 border border-[var(--input-border-color)] rounded-md bg-[var(--input-bg-color)] text-[var(--foreground-color)] focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent" placeholder="Enter your Gemini key">
+                                  <button id="saveGeminiApiKeyBtn" class="px-3 py-2 bg-[var(--secondary-color)] text-[var(--foreground-color)] rounded-md hover:bg-[var(--chat-list-hover-bg)] text-sm">Save</button>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
+              </div> <!-- End Modal Body -->
+
+              <!-- Modal Footer -->
+              <div class="flex justify-end p-6 border-t border-[var(--border-color-soft)]">
+                  <button type="button" id="closeSettingsFooterBtn" class="px-4 py-2 bg-[var(--secondary-color)] text-[var(--foreground-color)] rounded-md hover:bg-[var(--chat-list-hover-bg)]">Close</button>
+              </div>
+
+          </div> <!-- End Modal Content -->
+      </div>
+  </div> <!-- End Settings Modal -->
+
   <div class="flex flex-col h-screen">
     <!-- Header: Apply shadow -->
-    <div class="bg-[var(--header-bg-color)] text-[var(--header-text-color)] p-4 flex-shrink-0 flex justify-between items-center shadow-md" style="--tw-shadow-color: var(--shadow-color); box-shadow: 0 2px 4px -1px var(--shadow-color);">
-      <div class="flex items-center space-x-3">
+    <div class="bg-[var(--header-bg-color)] text-[var(--header-text-color)] p-4 flex-shrink-0 flex justify-between items-center shadow-md" style="--tw-shadow-color: var(--shadow-color); box-shadow: 0 2px 4px -1px var(--shadow-color); -webkit-app-region: drag;">
+      <div class="flex items-center space-x-3" style="-webkit-app-region: no-drag;">
         <h1 class="text-2xl font-bold">Project Reg</h1>
         <!-- Model selector moved to the right side -->
       </div>
       <div class="flex items-center space-x-4">
+        <!-- Window Controls -->
+        <div class="flex items-center space-x-2" style="-webkit-app-region: no-drag;">
+          <button id="minimizeBtn" class="btn-header-icon window-control-btn" aria-label="Minimize">
+            <i class="fas fa-window-minimize"></i>
+          </button>
+          <button id="maximizeBtn" class="btn-header-icon window-control-btn" aria-label="Maximize">
+            <i class="fas fa-window-maximize"></i>
+            <!-- Icon will be toggled to fa-window-restore by JS -->
+          </button>
+          <button id="closeBtn" class="btn-header-icon window-control-btn window-control-btn-close" aria-label="Close">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
         <!-- Token Counter Display -->
-        <div id="tokenCounterDisplay" class="text-sm opacity-90">
+        <div id="tokenCounterDisplay" class="text-sm opacity-90" style="-webkit-app-region: no-drag;">
           Today's Tokens: Loading...
         </div>
 
+        <!-- Timers/Alarms Display Area -->
+        <div id="timersAlarmsContainer" class="text-xs max-h-16 overflow-y-auto custom-scrollbar border-l border-r border-[var(--border-color-soft)] px-2 py-1" style="-webkit-app-region: no-drag;">
+            <!-- Timers and alarms will be listed here by app.js -->
+        </div>
+
         <!-- Model Selector (Relocated & Labelled) -->
-        <div class="flex items-center">
+        <div class="flex items-center" style="-webkit-app-region: no-drag;">
             <span class="text-sm font-medium mr-1 text-[var(--header-text-color)]/90">Model:</span>
             <div id="customModelSelector" class="relative">
               <button id="modelSelectorBtn" type="button" class="custom-select-button inline-flex items-center justify-between w-full rounded-md border border-transparent px-3 py-1 bg-white/10 text-[var(--header-text-color)]/90 hover:bg-white/20 focus:outline-none focus:ring-1 focus:ring-white/50 text-sm transition-colors">
@@ -89,17 +201,22 @@
         </div>
 
         <!-- Restyled Personality Button with Label -->
-        <button id="openPersonalitySelectorBtn" class="inline-flex items-center rounded-md border border-transparent px-3 py-1 bg-white/10 text-[var(--header-text-color)]/90 hover:bg-white/20 focus:outline-none focus:ring-1 focus:ring-white/50 text-sm transition-colors" aria-label="Select Personality">
+        <button id="openPersonalitySelectorBtn" class="inline-flex items-center rounded-md border border-transparent px-3 py-1 bg-white/10 text-[var(--header-text-color)]/90 hover:bg-white/20 focus:outline-none focus:ring-1 focus:ring-white/50 text-sm transition-colors" aria-label="Select Personality" style="-webkit-app-region: no-drag;">
             <span class="text-sm font-medium mr-1">Personality:</span>
             <span id="active-personality-name" class="font-semibold truncate pr-1">Loading...</span> <!-- Re-using the ID from the old display div -->
             <i class="fas fa-edit ml-2 h-4 w-4 text-[var(--header-text-color)]/70 flex-shrink-0"></i> <!-- Changed icon -->
         </button>
 
         <!-- Settings Button -->
-        <button id="settingsBtn" class="btn-header-icon" aria-label="Settings">
+        <button id="settingsBtn" class="btn-header-icon" aria-label="Settings" style="-webkit-app-region: no-drag; z-index: 10;">
           <i class="fas fa-cog"></i>
         </button>
       </div>
+    </div>
+
+    <!-- In-App Alerts Container (Fixed Position) -->
+    <div id="inAppAlertsContainer" class="fixed top-16 right-4 w-72 space-y-2 z-50">
+        <!-- In-app alerts (timers/alarms triggered, fallback notifications) will appear here -->
     </div>
 
     <div class="flex flex-1 overflow-hidden"> <!-- Main content area -->
@@ -141,10 +258,10 @@
           <div class="relative flex-grow"> <!-- Removed flex items-end, added flex-grow -->
             <textarea
               id="userInput"
-              class="textarea-base"
+              class="textarea-base custom-scrollbar"
               rows="1"
               placeholder="Type your message (Shift+Enter for newline, Enter to send)..."
-              style="padding-right: 3.5rem; min-height: 42px; max-height: 200px;"
+              style="padding-right: 3.5rem; min-height: 42px; max-height: 200px; overflow-y: auto;"
             ></textarea>
             <!-- Send Button: Apply gradient, adjust position slightly -->
             <button
@@ -163,125 +280,34 @@
     </div>
   </div>
 
-  <!-- Settings Modal -->
-  <!-- Settings Modal: Uses new CSS classes for structure and state -->
-  <div id="settingsModal"> <!-- Base container, controlled by CSS -->
-      <div class="modal-content"> <!-- Flex container from CSS -->
-
-          <!-- Modal Header -->
-          <div class="modal-header">
-              <h2 id="settingsModalTitle" class="modal-title">Settings</h2>
-              <button id="closeSettingsBtn" class="modal-close-button" aria-label="Close settings">
-                  <i class="fas fa-times"></i> <!-- Smaller icon if needed -->
-              </button>
-          </div>
-
-          <!-- Modal Body (Scrollable) -->
-          <div class="modal-body">
-
-              <!-- General Settings Section -->
-              <div class="settings-section">
-                  <h3>General</h3>
-                  <div class="form-group">
-                      <label for="themeSelector">Color Theme</label>
-                      <select id="themeSelector" class="select-base"> <!-- Use base class -->
-                          <option value="default">Default</option>
-                          <option value="light">Light</option>
-                          <option value="dark">Dark</option>
-                      </select>
-                  </div>
-              </div>
-
-              <!-- Model Settings Section -->
-              <div class="settings-section">
-                  <h3>Model Settings</h3>
-                  <div class="form-group">
-                      <label for="globalModelSelector">Default AI Model</label>
-                      <select id="globalModelSelector" class="select-base">
-                          <!-- Options populated by settingsModal.js -->
-                          <option value="">Loading models...</option>
-                      </select>
-                  </div>
-                  <div id="reasoningEffortGroup" class="form-group hidden"> <!-- Hidden by default -->
-                      <label for="reasoningEffortSelector">Reasoning Effort</label>
-                      <select id="reasoningEffortSelector" class="select-base">
-                          <option value="low">Low</option>
-                          <option value="medium" selected>Medium</option> <!-- Default -->
-                          <option value="high">High</option>
-                      </select>
-                      <p class="text-xs text-[var(--foreground-color-muted)] mt-1">Applies only to reasoning models (e.g., o4-mini).</p>
-                  </div>
-              </div>
-
-              <!-- API Keys Section -->
-              <div class="settings-section">
-                  <h3>API Keys</h3>
-                  <div class="form-group">
-                      <label for="openaiApiKeyInput">OpenAI API Key</label>
-                      <div class="flex items-center space-x-2">
-                          <input type="password" id="openaiApiKeyInput" class="input-base flex-grow" placeholder="Enter your OpenAI key">
-                          <button id="saveOpenaiApiKeyBtn" class="btn btn-secondary py-1.5 px-3 text-sm">Save</button> <!-- Consider btn-primary -->
-                      </div>
-                  </div>
-                  <div class="form-group">
-                      <label for="geminiApiKeyInput">Gemini API Key</label>
-                      <div class="flex items-center space-x-2">
-                          <input type="password" id="geminiApiKeyInput" class="input-base flex-grow" placeholder="Enter your Gemini key">
-                          <button id="saveGeminiApiKeyBtn" class="btn btn-secondary py-1.5 px-3 text-sm">Save</button> <!-- Consider btn-primary -->
-                      </div>
-                  </div>
-              </div>
-
-              <!-- Personality Settings Section -->
-              <div class="settings-section">
-                  <h3>Personality Details</h3>
-                  <div class="form-group">
-                      <label id="personalitySelectorLabel" for="personalitySelectorContainer">Configure Personality</label>
-                      <div id="personalitySelectorContainer" class="relative">
-                          <!-- Custom dropdown will be initialized here by customDropdown.js -->
-                          <select id="personalitySelector" class="hidden"></select> <!-- Hidden select stores value -->
-                          <!-- Button and dropdown panel created by JS -->
-                      </div>
-                  </div>
-
-                  <!-- Personality Details Sub-section (Initially Hidden) -->
-                  <div id="personalityDetailsContainer" class="hidden space-y-4 mt-4 p-4 border border-[var(--border-color-soft)] rounded-lg bg-[var(--content-bg-color-alt)]">
-                       <div class="form-group">
-                           <label>Description</label>
-                           <p id="personalityDescription" class="text-sm text-[var(--foreground-color-muted)] italic bg-[var(--input-bg-color)] p-2 rounded border border-[var(--input-border-color)] min-h-[40px]"></p>
-                       </div>
-                       <div class="form-group">
-                          <label>Default Context Sets</label>
-                          <div id="contextSetsContainer" class="space-y-2 max-h-32 overflow-y-auto custom-scrollbar border border-[var(--border-color-soft)] p-3 rounded bg-[var(--input-bg-color)]">
-                              <!-- Checkboxes populated by JS using .checkbox-group -->
-                          </div>
-                      </div>
-                      <div id="customInstructionsContainer" class="hidden form-group">
-                          <label for="customInstructionsTextarea">Custom Instructions Override</label>
-                          <textarea id="customInstructionsTextarea" class="textarea-base" rows="4" placeholder="Enter custom instructions for this personality..."></textarea>
-                      </div>
-                      <button id="savePersonalitySettingsBtn" class="btn btn-primary w-full mt-3 text-sm py-2" disabled>Save Personality Settings</button>
-                  </div>
-              </div>
-
-          </div> <!-- End Modal Body -->
-
-          <!-- Modal Footer -->
-          <div class="modal-footer">
-              <!-- Could add other buttons here if needed, e.g., a general "Close" -->
-              <button type="button" class="btn btn-secondary" onclick="document.getElementById('settingsModal').classList.remove('open')">Close</button>
-              <!-- Maybe move save buttons here? Or keep them contextual -->
-          </div>
-
-      </div> <!-- End Modal Content -->
-  </div> <!-- End Settings Modal -->
-
   <!-- Personality Selector Component HTML (Initially Hidden) -->
   <!-- Placeholder for Personality Selector HTML -->
   <div id="personality-selector-overlay" class="personality-selector-overlay hidden">
     <div class="personality-selector-background"></div>
     <div class="personality-selector-container">
-      <h2>Select Personality</h2>
+      <!-- Header with title and settings button -->
+      <div class="personality-selector-header">
+        <h2>Select Personality</h2>
+        <button id="personality-settings-btn" class="personality-settings-btn" title="Personality Settings">
+          <i class="fas fa-cog"></i>
+        </button>
+      </div>
+      
+      <!-- Settings Dropdown (initially hidden) -->
+      <div id="personality-settings-dropdown" class="personality-settings-dropdown hidden">
+        <div class="settings-section">
+          <h3>Available Personalities</h3>
+          <div id="personality-availability-list" class="personality-availability-list">
+            <!-- Personality toggles will be populated here -->
+          </div>
+        </div>
+        <div class="settings-section">
+          <button id="create-new-personality-btn" class="btn-primary">
+            <i class="fas fa-plus mr-2"></i>Create New Personality
+          </button>
+        </div>
+      </div>
+      
       <!-- Carousel will go here -->
       <div id="personality-carousel" class="swiper-container">
           <div class="swiper-wrapper">
@@ -299,12 +325,108 @@
     </div>
   </div>
 
+  <!-- Personality Editor Modal -->
+  <div id="personality-editor-overlay" class="personality-editor-overlay hidden">
+    <div class="personality-editor-background"></div>
+    <div class="personality-editor-container">
+      <div class="personality-editor-header">
+        <h2 id="personality-editor-title">Create New Personality</h2>
+        <button id="close-personality-editor" class="close-btn" title="Close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      
+      <div class="personality-editor-content">
+        <form id="personality-editor-form">
+          <!-- Basic Info Section -->
+          <div class="editor-section">
+            <h3>Basic Information</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="personality-name">Name</label>
+                <input type="text" id="personality-name" required placeholder="Enter personality name">
+              </div>
+              <div class="form-group">
+                <label for="personality-model">AI Model</label>
+                <select id="personality-model" required>
+                  <!-- Options will be populated by JS -->
+                </select>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="personality-description">Description</label>
+              <textarea id="personality-description" rows="2" placeholder="Brief description of this personality"></textarea>
+            </div>
+            
+            <div class="form-group">
+              <label for="personality-icon">Icon</label>
+              <div class="icon-selection">
+                <input type="text" id="personality-icon" placeholder="Icon path (e.g., src/renderer/media/icon.png)">
+                <button type="button" id="browse-icon-btn" class="btn-secondary">Browse</button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Prompt Section -->
+          <div class="editor-section">
+            <h3>System Prompt</h3>
+            <div class="form-group">
+              <label for="personality-prompt">Prompt Content</label>
+              <textarea id="personality-prompt" rows="8" placeholder="Enter the system prompt for this personality..."></textarea>
+            </div>
+          </div>
+          
+          <!-- Context Sets Section -->
+          <div class="editor-section">
+            <h3>Context Sets</h3>
+            <div class="context-sets-container">
+              <div class="context-column">
+                <h4>Available Context Sets</h4>
+                <div id="available-context-sets" class="context-list">
+                  <!-- Available context sets will be populated here -->
+                </div>
+              </div>
+              <div class="context-column">
+                <h4>Default Context Sets</h4>
+                <div id="default-context-sets" class="context-list">
+                  <!-- Default context sets will be populated here -->
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Tools Section -->
+          <div class="editor-section">
+            <h3>Available Tools</h3>
+            <div id="personality-tools" class="tools-grid">
+              <!-- Tool checkboxes will be populated here -->
+            </div>
+          </div>
+          
+          <!-- Custom Instructions Section -->
+          <div class="editor-section">
+            <h3>Custom Instructions</h3>
+            <div class="form-group">
+              <textarea id="personality-custom-instructions" rows="4" placeholder="Additional custom instructions for this personality..."></textarea>
+            </div>
+          </div>
+        </form>
+      </div>
+      
+      <div class="personality-editor-footer">
+        <button type="button" id="cancel-personality-editor" class="btn-secondary">Cancel</button>
+        <button type="button" id="save-personality" class="btn-primary">Save Personality</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Component Scripts -->
   <script type="module" src="components/personalitySelector.js"></script> <!-- Load as module -->
   <script src="components/autoResizeInput.js"></script>
   <script src="components/loadingIndicator.js"></script>
   <script src="components/customDropdown.js"></script> <!-- Define initializeCustomDropdown first -->
-  <script src="components/settingsModal.js"></script> <!-- Then load the script that uses it -->
+  <script src="components/settingsModal.js"></script> <!-- Settings modal script -->
 
   <!-- Main App Script (Load Last) -->
   <script type="module" src="app.js"></script> <!-- Load as module -->

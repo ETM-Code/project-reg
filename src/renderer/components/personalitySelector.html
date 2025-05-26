@@ -2,7 +2,29 @@
 <div id="personality-selector-overlay" class="personality-selector-overlay hidden">
   <div class="personality-selector-background"></div>
   <div class="personality-selector-container">
-    <h2>Select Personality</h2>
+    <!-- Header with title and settings button -->
+    <div class="personality-selector-header">
+      <h2>Select Personality</h2>
+      <button id="personality-settings-btn" class="personality-settings-btn" title="Personality Settings">
+        <i class="fas fa-cog"></i>
+      </button>
+    </div>
+    
+    <!-- Settings Dropdown (initially hidden) -->
+    <div id="personality-settings-dropdown" class="personality-settings-dropdown hidden">
+      <div class="settings-section">
+        <h3>Available Personalities</h3>
+        <div id="personality-availability-list" class="personality-availability-list">
+          <!-- Personality toggles will be populated here -->
+        </div>
+      </div>
+      <div class="settings-section">
+        <button id="create-new-personality-btn" class="btn-primary">
+          <i class="fas fa-plus mr-2"></i>Create New Personality
+        </button>
+      </div>
+    </div>
+    
     <!-- Carousel will go here -->
     <div id="personality-carousel" class="swiper-container">
         <div class="swiper-wrapper">
@@ -17,5 +39,113 @@
     <button id="close-personality-selector">Close</button>
     <!-- Particle canvas (optional, depending on library) -->
     <div id="particles-js"></div>
+  </div>
+</div>
+
+<!-- Personality Editor Modal -->
+<div id="personality-editor-overlay" class="personality-editor-overlay hidden">
+  <div class="personality-editor-background"></div>
+  <div class="personality-editor-container">
+    <div class="personality-editor-header">
+      <h2 id="personality-editor-title">Create New Personality</h2>
+      <button id="close-personality-editor" class="close-btn" title="Close">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    
+    <div class="personality-editor-content">
+      <form id="personality-editor-form">
+        <!-- Basic Info Section -->
+        <div class="editor-section">
+          <h3>Basic Information</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="personality-name">Name</label>
+              <input type="text" id="personality-name" required placeholder="Enter personality name">
+            </div>
+            <div class="form-group">
+              <label for="personality-model">AI Model</label>
+              <select id="personality-model" required>
+                <!-- Options will be populated by JS -->
+              </select>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="personality-description">Description</label>
+            <textarea id="personality-description" rows="2" placeholder="Brief description of this personality"></textarea>
+          </div>
+          
+          <div class="form-group">
+            <label for="personality-icon">Icon</label>
+            <div class="icon-selection">
+              <input type="text" id="personality-icon" placeholder="Icon path (e.g., src/renderer/media/icon.png)">
+              <button type="button" id="browse-icon-btn" class="btn-secondary">Browse</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Prompt Section -->
+        <div class="editor-section">
+          <h3>System Prompt</h3>
+          <div class="form-group">
+            <label for="personality-prompt">Prompt Content</label>
+            <textarea id="personality-prompt" rows="8" placeholder="Enter the system prompt for this personality..."></textarea>
+          </div>
+        </div>
+        
+        <!-- Context Sets Section -->
+        <div class="editor-section">
+          <h3>Context Sets</h3>
+          
+          <!-- Add New Context Files -->
+          <div class="form-group">
+            <label>Add Context Files from Computer</label>
+            <div class="file-browser-container">
+              <button type="button" id="browse-context-files-btn" class="btn-secondary">
+                <i class="fas fa-folder-open mr-2"></i>Browse Files
+              </button>
+              <span class="file-browser-help">Supported: .txt, .pdf, .docx, .xlsx, .csv, .rtf</span>
+            </div>
+          </div>
+          
+          <div class="context-sets-container">
+            <div class="context-column">
+              <h4>Available Context Sets</h4>
+              <div id="available-context-sets" class="context-list">
+                <!-- Available context sets will be populated here -->
+              </div>
+            </div>
+            <div class="context-column">
+              <h4>Default Context Sets</h4>
+              <div id="default-context-sets" class="context-list">
+                <!-- Default context sets will be populated here -->
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Tools Section -->
+        <div class="editor-section">
+          <h3>Available Tools</h3>
+          <div id="personality-tools" class="tools-grid">
+            <!-- Tool checkboxes will be populated here -->
+          </div>
+        </div>
+        
+        <!-- Custom Instructions Section -->
+        <div class="editor-section">
+          <h3>Custom Instructions</h3>
+          <div class="form-group">
+            <textarea id="personality-custom-instructions" rows="4" placeholder="Additional custom instructions for this personality..."></textarea>
+          </div>
+        </div>
+      </form>
+    </div>
+    
+    <div class="personality-editor-footer">
+      <button type="button" id="cancel-personality-editor" class="btn-secondary">Cancel</button>
+      <button type="button" id="save-personality" class="btn-primary">Save Personality</button>
+    </div>
   </div>
 </div>

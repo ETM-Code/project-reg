@@ -15,13 +15,17 @@ class MakeNote extends ActionBase {
     const note = params.note ? params.note.trim() : "";
     console.log("MakeNote received note:", note);
     let existingNotes = fs.readFileSync(NOTES_FILE, 'utf-8');
-    const totalTokens = numTokensFromString(existingNotes + note);
+    const timestamp = new Date().toISOString();
+    const noteWithTimestamp = `[${timestamp}] ${note}`;
+    const totalTokens = numTokensFromString(existingNotes + noteWithTimestamp);
     if (totalTokens > MAX_TOKENS) {
       archiveNotes(existingNotes);
       existingNotes = '';
     }
-    fs.appendFileSync(NOTES_FILE, `\n${note}`);
-    return { status: 'Note added' };
+    // Append a newline if existingNotes is not empty, then the note
+    const contentToAppend = existingNotes.length > 0 ? `\n${noteWithTimestamp}` : noteWithTimestamp;
+    fs.appendFileSync(NOTES_FILE, contentToAppend);
+    return { status: 'Note added with timestamp' };
   }
 
   /**

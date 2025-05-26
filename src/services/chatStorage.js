@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const EventEmitter = require('events');
 const settingsManager = require('../config/settingsManager'); // Import settingsManager
 
 // REMOVED: Hardcoded paths CHATS_DIR and VERSIONS_DIR
@@ -7,6 +8,7 @@ const settingsManager = require('../config/settingsManager'); // Import settings
 class ChatStorage {
   constructor() {
     // REMOVED: this.ensureChatsDirectory(); - Directories ensured on demand
+    this.emitter = new EventEmitter();
   }
 
   // Helper to get configured paths, ensuring settings are loaded
@@ -99,6 +101,15 @@ class ChatStorage {
         path.join(chatsDir, `${chatId}.json`),
         JSON.stringify(chatData, null, 2) // Add formatting
       );
+      console.log(`Chat title for ${chatId} updated to "${title}". Emitting event.`);
+      this.emitter.emit('title-updated', {
+        chatId: chatId,
+        newTitle: title,
+        // Pass along model and personality for context if needed by listeners
+        modelId: model,
+        personalityId: personalityId,
+        lastUpdated: chatData.lastUpdated // Pass lastUpdated as well
+      });
       return true;
     } catch (error) {
       console.error(`Error updating chat title for ${chatId}:`, error);
@@ -126,16 +137,19 @@ class ChatStorage {
             if (!data) return null;
             return {
               id: data.id,
-              title: data.title, // This will now be the potentially AI-generated title
-              lastUpdated: data.lastUpdated
+              title: data.title,
+              lastUpdated: data.lastUpdated,
+              titleGenerated: typeof data.titleGenerated === 'boolean' ? data.titleGenerated : false, // Ensure boolean
+              modelId: data.modelId || data.model || null, // Check both field names for backward compatibility
+              personalityId: data.personalityId || null // Ensure it exists or is null
             };
           })
       );
       // Filter out null entries and sort
       return chats.filter(chat => chat !== null).sort((a, b) => b.lastUpdated - a.lastUpdated);
     } catch (error) {
-      console.error('Error loading chat:', error);
-      return null;
+      console.error('Error listing chats:', error); // Corrected log message
+      return []; // Return empty array on error, consistent with initial check
     }
   }
 

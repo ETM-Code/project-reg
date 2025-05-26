@@ -9,18 +9,31 @@ const OpenAIReasoningChat = require('./openaiReasoningChat'); // Import the new 
 const actionsManager = require('../actions/ActionsManager'); // Import ActionsManager instance
 // Loaders are used by the model implementations now, not directly here.
 
+const MAX_CHATS_TO_BATCH_PROCESS = 50; // Max chats to process in one batch run for title generation
+
 // --- Dedicated Client for Title Generation ---
 let titleGenClient = null;
-try {
-    const openaiApiKey = settingsManager.getApiKey('openai') || process.env.OPENAI_API_KEY;
-    if (openaiApiKey) {
-        titleGenClient = new OpenAI({ apiKey: openaiApiKey });
-        console.log("[ChatManager] Dedicated OpenAI client for title generation initialized.");
-    } else {
-        console.warn("[ChatManager] OpenAI API key not found. Title generation will be disabled.");
+
+// Lazy initialization function for title generation client
+function initializeTitleGenClient() {
+    if (titleGenClient) {
+        return titleGenClient; // Already initialized
     }
-} catch (error) {
-    console.error("[ChatManager] Failed to initialize dedicated OpenAI client for title generation:", error);
+    
+    try {
+        const openaiApiKey = settingsManager.getApiKey('openai') || process.env.OPENAI_API_KEY;
+        if (openaiApiKey) {
+            titleGenClient = new OpenAI({ apiKey: openaiApiKey });
+            console.log("[ChatManager] Dedicated OpenAI client for title generation initialized.");
+            return titleGenClient;
+        } else {
+            console.warn("[ChatManager] OpenAI API key not found. Title generation will be disabled.");
+            return null;
+        }
+    } catch (error) {
+        console.error("[ChatManager] Failed to initialize dedicated OpenAI client for title generation:", error);
+        return null;
+    }
 }
 
 // --- State Variables ---
@@ -31,6 +44,30 @@ let activeModelInstance = null;
 /** @type {import('../config/settingsManager').Personality | null} */
 let currentPersonalityConfig = null;
 let currentReasoningContext = null; // State for reasoning context persistence
+let pendingTimeSinceLastChatInfo = null; // Stores formatted string about time since last chat
+
+// Helper function to format time difference
+function formatTimeDifference(ms) {
+  // This function is called only if ms > 10 minutes
+  let seconds = Math.floor(ms / 1000);
+  let minutes = Math.floor(seconds / 60);
+  let hours = Math.floor(minutes / 60);
+  let days = Math.floor(hours / 24);
+
+  minutes %= 60; // Remainder minutes
+  hours %= 24;   // Remainder hours
+
+  const parts = [];
+  if (days > 0) parts.push(`${days} day${days > 1 ? 's' : ''}`);
+  if (hours > 0) parts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
+  if (minutes > 0) parts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
+
+  if (parts.length === 0) {
+    // Should be unlikely if ms > 10 minutes, but as a fallback.
+    return `(System: Last chat session was over 10 minutes ago)\n`;
+  }
+  return `(System: Last chat session was ${parts.join(', ')} ago)\n`;
+}
 
 // --- Initialization and Personality Management ---
 
@@ -139,18 +176,33 @@ async function sendMessageToModel() {
    }
 
    // Retrieve tool schemas based on the personality configuration
-   const toolNamesFromPersonality = currentPersonalityConfig.tools || [];
+   const toolNamesFromPersonality = currentPersonalityConfig.tools || []; // These are names like "createNotification"
    let toolSchemas = [];
+
    if (toolNamesFromPersonality.length > 0) {
-       // Convert internal camelCase names (from personality config) to snake_case for schema lookup
-       const schemaToolNames = toolNamesFromPersonality.map(name => actionsManager.actionNameToSchemaName[name] || name); // Fallback if mapping missing
-       console.log(`[ChatManager] Requesting schemas for tools: ${schemaToolNames.join(', ')}`);
-       toolSchemas = actionsManager.getToolDeclarations(schemaToolNames);
-       console.log(`[ChatManager] Retrieved ${toolSchemas.length} tool schemas.`);
+       // Convert personality tool names (e.g., "createNotification") to schema_names (e.g., "create_notification")
+       // using the map from actionsManager.
+       const schemaToolNames = toolNamesFromPersonality.map(name => {
+           const schemaName = actionsManager.actionNameToSchemaName[name];
+           if (!schemaName) {
+               console.warn(`[ChatManager] No schema name mapping found in ActionsManager for tool: ${name}. Using name directly.`);
+               return name; // Fallback to using the name directly if no mapping
+           }
+           return schemaName;
+       }).filter(name => name); // Filter out any undefined if a mapping was missing and we chose to skip
+
+       if (schemaToolNames.length > 0) {
+           console.log(`[ChatManager] Requesting schemas for resolved tool schema names: ${schemaToolNames.join(', ')}`);
+           toolSchemas = actionsManager.getToolDeclarations(schemaToolNames);
+           console.log(`[ChatManager] Retrieved ${toolSchemas.length} tool schemas.`);
+       } else {
+           console.log(`[ChatManager] No valid schema names resolved from personality tools.`);
+       }
    }
 
+
    const options = {
-       tools: toolSchemas, // Pass the actual schemas retrieved from ActionsManager
+       tools: toolSchemas.length > 0 ? toolSchemas : undefined, // Pass schemas, or undefined if none
        // No overrides by default, model implementation will load defaults
    };
 
@@ -187,11 +239,26 @@ async function sendMessageToModel() {
 // --- History Management ---
 
 function appendUserMessage(message) {
+  let userMessageContent = message;
+  let prefixContent = "";
+
+  // Check if this is the first user message of the current session
+  const isFirstUserMessageInSession = conversationHistory.filter(m => m.role === 'user').length === 0;
+
+  if (pendingTimeSinceLastChatInfo && isFirstUserMessageInSession) {
+    prefixContent = pendingTimeSinceLastChatInfo; // This already includes "(System: ...)\n"
+    pendingTimeSinceLastChatInfo = null; // Consume it
+  }
+
   const now = new Date();
-  const timeDiff = conversationHistory.lastMessageTime ? Math.round((now - conversationHistory.lastMessageTime) / 1000) : 0;
-  conversationHistory.lastMessageTime = now;
-  const metadata = `Date: ${now.toLocaleDateString()} | Time: ${now.toLocaleTimeString()} | Since last msg: ${timeDiff}s\n`;
-  const fullMessage = metadata + message;
+  // timeDiffSinceLastInternalMsg is for time since last message *in this current chat session*
+  const timeDiffSinceLastInternalMsg = conversationHistory.lastMessageTime ? Math.round((now - conversationHistory.lastMessageTime) / 1000) : 0;
+  conversationHistory.lastMessageTime = now; // Update for next message in this chat
+
+  const metadata = `Date: ${now.toLocaleDateString()} | Time: ${now.toLocaleTimeString()} | Since last msg: ${timeDiffSinceLastInternalMsg}s\n`;
+  // Construct fullMessage: system prefix (if any), then metadata, then the user's actual message
+  const fullMessage = prefixContent + metadata + userMessageContent;
+
   const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   conversationHistory.push({
     id: messageId,
@@ -229,24 +296,60 @@ function appendModelResponse(responseText, rawToolData = null) {
 /**
  * Appends the result of a tool execution to the history using a standardized format.
  * @param {string} toolCallId - The original ID of the tool call from the model (if available).
- * @param {string} toolName - The name of the tool/function that was called.
+ * @param {string} toolName - The name of the tool/function that was called (schema_name).
  * @param {object} result - The result returned by the tool execution.
  */
-function appendToolResponseMessage(toolCallId, toolName, result) {
+function appendToolResponseMessage(toolCallId, toolName, result) { // toolName here is schema_name
     console.log(`[ChatManager] Appending tool response for ${toolName} (Call ID: ${toolCallId})`);
 
     // Standardized internal format
     const toolResponseEntry = {
-        id: `tool_${toolName}_${Date.now()}`, // Unique internal ID
-        role: "tool",
-        name: toolName, // The function name that was called
-        content: result, // The actual result object/value
-        toolCallId: toolCallId // Store the original model's tool call ID if available (e.g., for GPT)
+        id: `tool_${toolName.replace(/_/g, '-')}_${Date.now()}`, // Unique internal ID, make it more filename friendly
+        role: "tool", // This role is specific to how some models expect tool results (e.g., Gemini)
+                      // For OpenAI, the role is 'tool' and content is stringified JSON of the result,
+                      // and it needs a `tool_call_id`.
+                      // The model interface's `transformToolResponsesForModel` should handle this.
+        name: toolName, // The schema_name of the function that was called
+        content: result, // The actual result object/value from action.execute()
+        toolCallId: toolCallId // Store the original model's tool call ID
     };
 
     conversationHistory.push(toolResponseEntry);
     console.log(`[ChatManager] Appended tool response. History length: ${conversationHistory.length}`);
 }
+
+
+/**
+ * Executes a tool call and appends the result to history.
+ * This is a new helper function to be called from the main IPC handler.
+ * @param {string} toolCallId - The ID of the tool call.
+ * @param {string} toolName - The schema_name of the tool to execute.
+ * @param {object} toolParams - The parameters for the tool.
+ * @returns {Promise<object>} The result of the tool execution.
+ */
+async function executeToolAndAppendResponse(toolCallId, toolName, toolParams) {
+    console.log(`[ChatManager] Attempting to execute tool: ${toolName} with ID: ${toolCallId}`);
+    try {
+        // Provide chatManager itself as part of the execution context
+        const executionContext = {
+            chatManager: {
+                getCurrentChatId: getCurrentChatId // Expose specific methods needed by actions
+                // Add other chatManager methods if actions require them
+            }
+            // Add other context parts if necessary
+        };
+
+        const result = await actionsManager.execute(toolName, toolParams, executionContext);
+        appendToolResponseMessage(toolCallId, toolName, result); // result is {success: boolean, ...}
+        return result; // Return the direct result from the action
+    } catch (error) {
+        console.error(`[ChatManager] Error executing tool ${toolName}:`, error);
+        const errorResult = { success: false, error: error.message || "Tool execution failed" };
+        appendToolResponseMessage(toolCallId, toolName, errorResult);
+        return errorResult; // Return an error structure
+    }
+}
+
 
 // --- Getters ---
 
@@ -279,24 +382,58 @@ async function checkAndDeleteEmptyChat(chatId, history) {
 }
 
 async function startNewChat() {
-  // Check and potentially delete the previous chat if empty
   const previousChatId = currentChatId;
-  const previousHistory = [...conversationHistory];
+  const previousHistory = [...conversationHistory]; // Copy of the history of the chat we are leaving
+
+  // Calculate time since last message of previous chat
+  pendingTimeSinceLastChatInfo = null; // Reset before calculation
+  if (previousChatId && previousHistory.length > 0) {
+    const lastMessageOfPreviousChat = previousHistory[previousHistory.length - 1];
+    // Ensure the ID format is as expected and contains a timestamp
+    // Message IDs are like: msg_1678886400000_randomstring or tool_toolName_1678886400000
+    let lastMessageTimestamp;
+
+    if (lastMessageOfPreviousChat.id) {
+        const idParts = lastMessageOfPreviousChat.id.split('_');
+        if (lastMessageOfPreviousChat.id.startsWith('msg_') && idParts.length >= 2) {
+            lastMessageTimestamp = parseInt(idParts[1], 10);
+        } else if (lastMessageOfPreviousChat.id.startsWith('tool_') && idParts.length >= 3) {
+            lastMessageTimestamp = parseInt(idParts[idParts.length -1], 10); // Timestamp is usually last for tool responses
+        } else if (lastMessageOfPreviousChat.id.startsWith('model_') && idParts.length >=2) { // Assuming model responses might also have timestamps in ID like msg_
+            lastMessageTimestamp = parseInt(idParts[1], 10);
+        }
+    }
+
+
+    if (lastMessageTimestamp && !isNaN(lastMessageTimestamp)) {
+        const currentTime = Date.now();
+        const timeDifferenceMs = currentTime - lastMessageTimestamp;
+        const TEN_MINUTES_MS = 10 * 60 * 1000;
+
+        if (timeDifferenceMs > TEN_MINUTES_MS) {
+            pendingTimeSinceLastChatInfo = formatTimeDifference(timeDifferenceMs);
+            console.log(`[ChatManager] Storing time since last chat: ${pendingTimeSinceLastChatInfo.trim()}`);
+        }
+    } else {
+        console.warn("[ChatManager] Could not parse timestamp from last message ID of previous chat:", lastMessageOfPreviousChat.id);
+    }
+  }
+
   const deletedChatId = await checkAndDeleteEmptyChat(previousChatId, previousHistory);
 
   // Reset state for the new chat
   conversationHistory = [];
-  currentChatId = Date.now().toString();
+  currentChatId = Date.now().toString(); // This is used for the chat *file name*, not individual messages
   activeModelInstance = null; // Clear the model instance
   currentPersonalityConfig = null;
   currentReasoningContext = null; // Reset reasoning context for new chat
+  // conversationHistory.lastMessageTime is implicitly reset as conversationHistory is a new array
 
   try {
     // Initialize with the default personality from settings
     const defaultPersonalityId = settingsManager.getDefaults().personalityId;
     if (!defaultPersonalityId) {
       console.error("[ChatManager] Default personality ID not found in settings.");
-      // Handle error - maybe default to first available personality?
       const personalities = settingsManager.getPersonalities();
       if (personalities.length > 0) {
           await setActivePersonality(personalities[0].id);
@@ -310,7 +447,6 @@ async function startNewChat() {
     return { newChatId: currentChatId, deletedChatId: deletedChatId };
   } catch (error) {
       console.error("[ChatManager] Failed to initialize default personality for new chat:", error);
-      // Return IDs but indicate potential issue?
       return { newChatId: currentChatId, deletedChatId: deletedChatId, error: error.message };
   }
 }
@@ -351,7 +487,7 @@ async function editMessage(messageId, newContent) {
     await chatStorage.saveChat(
         currentChatId,
         conversationHistory,
-        activeModelInstance?.getModelId() || 'unknown', // Use getModelId()
+        activeModelInstance?.getModelName() || 'unknown', // Use getModelName()
         currentPersonalityConfig?.id // Get personality ID
     );
 
@@ -374,79 +510,148 @@ async function editMessage(messageId, newContent) {
   return { error: `Message ID ${messageId} not found.` }; // Indicate edit failure clearly
 }
 
-// New function to handle the title generation logic using a dedicated client
-async function triggerTitleGeneration() {
-    // Use the dedicated title generation client
-    if (!titleGenClient) {
-        console.warn("[ChatManager] Title generation skipped: OpenAI client not initialized (missing API key?).");
+async function triggerTitleGeneration(chatIdToGenerateFor = null) {
+    const effectiveChatId = chatIdToGenerateFor || currentChatId;
+
+    if (!effectiveChatId || typeof effectiveChatId !== 'string') {
+        console.warn(`[ChatManager] Title generation skipped: Invalid effectiveChatId ('${effectiveChatId}').`);
         return null;
     }
-    if (!currentChatId || typeof currentChatId !== 'string') {
-         console.warn(`[ChatManager] Title generation skipped: Invalid currentChatId ('${currentChatId}').`);
+
+    // Initialize title generation client lazily
+    const titleClient = initializeTitleGenClient();
+    if (!titleClient) {
+        console.warn("[ChatManager] Title generation skipped: OpenAI client for titles not initialized (missing API key?).");
+        return null;
+    }
+
+    let chatToProcess; // Will hold { title, titleGenerated, modelId, personalityId } from loaded/current chat
+    let historyForPrompt;
+    let modelIdToSaveWith;
+    let personalityIdToSaveWith;
+    let fullHistoryToSave;
+
+    if (chatIdToGenerateFor) {
+        // Batch mode or specific chat ID provided
+        const loadedChat = await chatStorage.loadChat(effectiveChatId); // chatStorage.loadChat returns full chat object
+        if (!loadedChat || !loadedChat.history) {
+            console.warn(`[ChatManager] Title generation for ${effectiveChatId} skipped: Could not load chat data or history.`);
+            return null;
+        }
+        chatToProcess = loadedChat; // Contains .title, .titleGenerated, .modelId, .personalityId, .history
+        historyForPrompt = loadedChat.history;
+        
+        // Handle missing modelId/personalityId with fallbacks for older chats
+        const defaults = settingsManager.getDefaults();
+        const availablePersonalities = settingsManager.getPersonalities();
+        
+        // Debug logging to see what we have
+        console.log(`[ChatManager] Debug - Chat ${effectiveChatId} loaded data:`, {
+            modelId: loadedChat.modelId,
+            model: loadedChat.model,
+            personalityId: loadedChat.personalityId,
+            hasHistory: !!loadedChat.history
+        });
+        
+        modelIdToSaveWith = loadedChat.modelId || loadedChat.model || defaults.modelId || defaults.defaultModel;
+        personalityIdToSaveWith = loadedChat.personalityId || defaults.personalityId || (availablePersonalities.length > 0 ? availablePersonalities[0].id : 'reg-lifecoach');
+        
+        // Debug logging for fallbacks
+        console.log(`[ChatManager] Debug - Fallback values:`, {
+            modelIdToSaveWith,
+            personalityIdToSaveWith,
+            defaultsModelId: defaults.modelId,
+            defaultsDefaultModel: defaults.defaultModel,
+            defaultsPersonalityId: defaults.personalityId
+        });
+        
+        fullHistoryToSave = loadedChat.history;
+    } else {
+        // Current chat mode
+        if (!currentChatId || conversationHistory.length < 1) { // Allow title gen even with only one message for prompt
+            console.log("[ChatManager] Title generation (current chat) skipped: History too short or no current chat.");
+            return null;
+        }
+        const currentChatStoredData = await chatStorage.loadChat(effectiveChatId);
+        if (!currentChatStoredData) {
+            console.warn(`[ChatManager] Title generation (current chat) skipped: Could not load stored data for ${effectiveChatId}.`);
+            return null;
+        }
+        chatToProcess = currentChatStoredData; // Contains .title, .titleGenerated from storage
+        historyForPrompt = conversationHistory; // Use live history for prompt
+        modelIdToSaveWith = activeModelInstance?.getModelName();
+        personalityIdToSaveWith = currentPersonalityConfig?.id;
+        fullHistoryToSave = conversationHistory; // Save the live full history
+    }
+
+    if (!modelIdToSaveWith || !personalityIdToSaveWith) {
+        console.error(`[ChatManager] Title generation for ${effectiveChatId}: Cannot save title, missing modelId ('${modelIdToSaveWith}') or personalityId ('${personalityIdToSaveWith}'). This is critical for data integrity.`);
+        return null;
+    }
+    
+    const placeholderTitle = `Chat from ${new Date(parseInt(effectiveChatId)).toLocaleString()}`;
+    // Ensure titleGenerated is explicitly checked
+    const isTitleActuallyGenerated = typeof chatToProcess.titleGenerated === 'boolean' ? chatToProcess.titleGenerated : false;
+
+    if (isTitleActuallyGenerated && chatToProcess.title !== placeholderTitle) {
+        console.log(`[ChatManager] Title for chat ${effectiveChatId} ("${chatToProcess.title}") already generated and is not placeholder. Skipping.`);
+        return chatToProcess.title;
+    }
+    if (isTitleActuallyGenerated && chatToProcess.title === placeholderTitle) {
+        console.log(`[ChatManager] Title for chat ${effectiveChatId} is a placeholder ("${chatToProcess.title}"). Attempting regeneration.`);
+    }
+     if (historyForPrompt.length < 1) {
+         console.warn(`[ChatManager] Title generation for ${effectiveChatId} skipped: History for prompt is empty.`);
          return null;
     }
-    if (conversationHistory.length < 2) {
-        console.log("[ChatManager] Title generation skipped: History too short.");
+
+    const firstUserMessage = historyForPrompt.find(m => m.role === 'user')?.parts[0]?.text || '';
+    const firstModelResponse = historyForPrompt.find(m => m.role === 'model')?.parts[0]?.text || '';
+
+    let promptContent = "";
+    if (firstUserMessage) promptContent += `User: ${firstUserMessage.substring(0, 300)}\n`;
+    if (firstModelResponse) promptContent += `Model: ${firstModelResponse.substring(0, 300)}\n`;
+
+    if (!promptContent.trim()) {
+        console.warn(`[ChatManager] Title generation for ${effectiveChatId} skipped: No content for prompt from user/model messages.`);
         return null;
     }
 
-    // Avoid regenerating if already done
-    const chatData = await chatStorage.loadChat(currentChatId);
-    if (chatData && chatData.titleGenerated) {
-        console.log(`[ChatManager] Title already generated for chat ${currentChatId}`);
-        return null;
-    }
-
-    // Extract first user message and first model response
-    const firstUserMessage = conversationHistory.find(m => m.role === 'user')?.parts[0]?.text || '';
-    const firstModelResponse = conversationHistory.find(m => m.role === 'model')?.parts[0]?.text || '';
-
-    if (!firstUserMessage || !firstModelResponse) {
-        console.warn("[ChatManager] Title generation skipped: Missing first user or model message.");
-        return null;
-    }
-
-    const titlePrompt = `Based on the following first user message and first model response, generate a very concise title (5 words maximum) for this chat session. Only return the title text, nothing else.\n\nUser: ${firstUserMessage}\nModel: ${firstModelResponse}\n\nTitle:`;
-    const titleModel = "gpt-4.1-nano"; // Enforce specific model
+    const titlePrompt = `Based on the following conversation snippet, generate a very concise title (5 words maximum) for this chat session. Only return the title text, nothing else.\n\n${promptContent}\nTitle:`;
+    const titleModelToUse = "gpt-4.1-nano";
 
     try {
-        console.log(`[ChatManager] Requesting title generation using dedicated client and model ${titleModel}`);
-        const response = await titleGenClient.chat.completions.create({
-            model: titleModel,
+        console.log(`[ChatManager] Requesting title generation for ${effectiveChatId} using model ${titleModelToUse}`);
+        const response = await titleClient.chat.completions.create({
+            model: titleModelToUse,
             messages: [{ role: "user", content: titlePrompt }],
             temperature: 0.5,
             max_tokens: 20,
         });
-        const generatedTitle = response.choices[0].message.content.trim().replace(/^"|"$/g, ''); // Remove surrounding quotes if any
+        let generatedTitle = response.choices[0].message.content.trim().replace(/^["']|["']$/g, '');
+        generatedTitle = generatedTitle.replace(/\.$/, "").trim(); // Remove trailing period and re-trim
 
-        if (generatedTitle) {
-            console.log(`[ChatManager] Generated title for chat ${currentChatId}: ${generatedTitle}`);
-            // Save the updated title and mark as generated
-            // Use the currently active model/personality for saving context, even though title gen used OpenAI
-            const currentModel = getActiveModelInstance();
-            const currentPersonality = getCurrentPersonalityConfig();
-            if (currentModel && currentPersonality) {
-                await chatStorage.updateChatTitle(
-                    currentChatId,
-                    generatedTitle,
-                    conversationHistory, // Save full current history
-                    currentModel.getModelName(), // Save the *active* chat model name
-                    currentPersonality.id // Save the *active* personality ID
-                );
-                return generatedTitle;
-            } else {
-                 console.error("[ChatManager] Could not save generated title - missing active model or personality info.");
-                 return null; // Indicate failure to save, even though title was generated
-            }
+        if (generatedTitle && generatedTitle.length > 0 && generatedTitle.toLowerCase() !== "error" && generatedTitle.toLowerCase() !== "null") {
+            console.log(`[ChatManager] Generated title for chat ${effectiveChatId}: "${generatedTitle}"`);
+            
+            await chatStorage.updateChatTitle(
+                effectiveChatId,
+                generatedTitle,
+                fullHistoryToSave,
+                modelIdToSaveWith,
+                personalityIdToSaveWith
+            );
+            // chatStorage.updateChatTitle handles setting titleGenerated: true and emitting event
+            return generatedTitle;
         } else {
-             console.warn("[ChatManager] Title generation resulted in an empty title.");
-             return null;
+            console.warn(`[ChatManager] Title generation for ${effectiveChatId} resulted in an empty or invalid title: "${generatedTitle}". Original prompt content: ${promptContent.substring(0,100)}`);
+            return null;
         }
     } catch (error) {
-        console.error("[ChatManager] Error during centralized title generation:", error);
-        return null; // Return null on error
+        console.error(`[ChatManager] Error during title generation for ${effectiveChatId}:`, error);
+        return null;
     }
-} // Closes triggerTitleGeneration function
+}
 
 function getCurrentChatId() {
   return currentChatId;
@@ -506,6 +711,54 @@ async function loadChat(chatId) {
    }
 }
 
+async function batchCheckAndGenerateTitles() {
+    console.log("[ChatManager] Starting batch check for title generation.");
+    try {
+        const allChatsMeta = await chatStorage.listChats(); // Expects { id, title, lastUpdated, titleGenerated, modelId, personalityId }
+        if (!allChatsMeta || allChatsMeta.length === 0) {
+            console.log("[ChatManager] batchCheck: No chats found to process.");
+            return;
+        }
+
+        const chatsNeedingTitle = [];
+        for (const chatMeta of allChatsMeta) {
+            const placeholderTitle = `Chat from ${new Date(parseInt(chatMeta.id)).toLocaleString()}`;
+            const isTitleEffectivelyGenerated = typeof chatMeta.titleGenerated === 'boolean' ? chatMeta.titleGenerated : false;
+
+            if (!chatMeta.title || !isTitleEffectivelyGenerated || chatMeta.title === placeholderTitle) {
+                // For older chats missing modelId or personalityId, we'll provide fallbacks during title generation
+                // instead of skipping them entirely
+                chatsNeedingTitle.push(chatMeta);
+            }
+        }
+
+        if (chatsNeedingTitle.length === 0) {
+            console.log("[ChatManager] batchCheck: No chats require title generation/update after filtering.");
+            return;
+        }
+
+        // listChats should already sort by lastUpdated descending.
+        console.log(`[ChatManager] batchCheck: Found ${chatsNeedingTitle.length} chats potentially needing title. Processing up to ${MAX_CHATS_TO_BATCH_PROCESS}.`);
+
+        let processedCount = 0;
+        for (const chatMeta of chatsNeedingTitle.slice(0, MAX_CHATS_TO_BATCH_PROCESS)) { // Process only a slice
+            console.log(`[ChatManager] batchCheck: Attempting title generation for chat ${chatMeta.id} (Last updated: ${new Date(chatMeta.lastUpdated).toLocaleString()}). Current title: "${chatMeta.title}", Generated flag: ${chatMeta.titleGenerated}`);
+            try {
+                const newTitle = await triggerTitleGeneration(chatMeta.id); // This will load the full chat data
+                if (newTitle) {
+                    console.log(`[ChatManager] batchCheck: Successfully generated/updated title for chat ${chatMeta.id} to "${newTitle}".`);
+                }
+            } catch (error) {
+                console.error(`[ChatManager] batchCheck: Error processing chat ${chatMeta.id} for title generation:`, error);
+            }
+            processedCount++;
+        }
+        console.log(`[ChatManager] batchCheck: Finished. Processed ${processedCount} chats.`);
+    } catch (error) {
+        console.error("[ChatManager] batchCheck: Critical error during batch title processing:", error);
+    }
+}
+
 module.exports = {
   setActivePersonality, // Renamed from initialize
   appendUserMessage,
@@ -520,7 +773,9 @@ module.exports = {
   loadChat,
   getConversationHistory,
   triggerTitleGeneration,
+  batchCheckAndGenerateTitles, // Export the new function
   checkAndDeleteEmptyChat, // Keep helper exported if needed by IPC layer
-  setCurrentChatPersonality // Export the new function
+  setCurrentChatPersonality, // Export the new function
+  executeToolAndAppendResponse // Export the new helper
   // REMOVED: toolDeclarations export
 };

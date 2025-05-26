@@ -4,6 +4,45 @@ const chatManager = require('../models/chatManager');
 const settingsManager = require('../config/settingsManager'); // Import settingsManager
 const dailyTokenTracker = require('../services/dailyTokenTracker'); // Added for token tracking
 const { countTokens } = require('../util/tokenCounter'); // Added for token counting
+const fileConverter = require('../util/fileConverter'); // Import file converter
+const pathManager = require('../util/pathManager'); // Import path manager
+const { dialog } = require('electron'); // For file dialogs
+const fs = require('fs');
+const path = require('path');
+
+// Use path manager for file paths
+const TIMERS_FILE_PATH = pathManager.getTimersPath();
+const ALARMS_FILE_PATH = pathManager.getAlarmsPath();
+
+// Helper function to read JSON file safely
+function readJsonFile(filePath, defaultData = []) {
+    try {
+        if (fs.existsSync(filePath)) {
+            const data = fs.readFileSync(filePath, 'utf8');
+            return JSON.parse(data);
+        }
+        return defaultData;
+    } catch (error) {
+        console.error(`[IPC] Error reading JSON file ${filePath}:`, error);
+        return defaultData;
+    }
+}
+
+// Helper function to write JSON file safely
+function writeJsonFile(filePath, data) {
+    try {
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+        return true;
+    } catch (error) {
+        console.error(`[IPC] Error writing JSON file ${filePath}:`, error);
+        return false;
+    }
+}
+
 
 function setupIpcHandlers(mainWindow) { // Accept mainWindow
     ipcMain.handle('list-chats', async () => {
@@ -180,7 +219,8 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
             const currentChatId = chatManager.getCurrentChatId();
             const currentHistory = chatManager.getConversationHistory();
             const currentPersonality = chatManager.getCurrentPersonalityConfig();
-            if (currentChatId && currentHistory && activeModel && currentPersonality) {
+            // Add explicit type check for currentChatId before saving in edit flow
+            if (currentChatId && typeof currentChatId === 'string' && currentHistory && activeModel && currentPersonality) {
                 await chatStorage.saveChat(
                     currentChatId,
                     currentHistory,
@@ -188,6 +228,8 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
                     currentPersonality.id
                 );
                 console.log(`[IPC Edit] History saved for chat ${currentChatId} after edit completion.`);
+            } else if (typeof currentChatId !== 'string') {
+                 console.error(`[IPC Edit] Could not save history after edit - Invalid chatId type: ${typeof currentChatId} (Value: ${currentChatId})`);
             } else {
                  console.error("[IPC Edit] Could not save history after edit - missing info.");
             }
@@ -399,6 +441,514 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
         } catch (error) {
             console.error(`[IPC] Error saving setting ${key}:`, error);
             return { success: false, error: error.message }; // Return error object
+        }
+    });
+
+    // --- Timer and Alarm IPC Handlers ---
+    ipcMain.handle('get-active-timers', async () => {
+        const timers = readJsonFile(TIMERS_FILE_PATH).filter(t => !t.triggered && (t.startTime + t.duration * 1000) > Date.now());
+        return { success: true, timers };
+    });
+
+    ipcMain.handle('get-active-alarms', async () => {
+        const alarms = readJsonFile(ALARMS_FILE_PATH).filter(a => !a.triggered); // Basic filter, frontend handles time check for display
+        return { success: true, alarms };
+    });
+
+    ipcMain.handle('dismiss-timer', async (_, timerId) => {
+        try {
+            let timers = readJsonFile(TIMERS_FILE_PATH);
+            timers = timers.filter(t => t.id !== timerId);
+            writeJsonFile(TIMERS_FILE_PATH, timers);
+            return { success: true };
+        } catch (error) {
+            console.error(`[IPC] Error dismissing timer ${timerId}:`, error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('dismiss-alarm', async (_, alarmId) => {
+        try {
+            let alarms = readJsonFile(ALARMS_FILE_PATH);
+            alarms = alarms.filter(a => a.id !== alarmId);
+            writeJsonFile(ALARMS_FILE_PATH, alarms);
+            return { success: true };
+        } catch (error) {
+            console.error(`[IPC] Error dismissing alarm ${alarmId}:`, error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('mark-timer-triggered', async (_, timerId) => {
+        try {
+            let timers = readJsonFile(TIMERS_FILE_PATH);
+            const timer = timers.find(t => t.id === timerId);
+            if (timer) {
+                timer.triggered = true;
+                writeJsonFile(TIMERS_FILE_PATH, timers);
+                return { success: true, timer };
+            }
+            return { success: false, error: 'Timer not found' };
+        } catch (error) {
+            console.error(`[IPC] Error marking timer ${timerId} as triggered:`, error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('mark-alarm-triggered', async (_, alarmId) => {
+        try {
+            let alarms = readJsonFile(ALARMS_FILE_PATH);
+            const alarm = alarms.find(a => a.id === alarmId);
+            if (alarm) {
+                alarm.triggered = true;
+                writeJsonFile(ALARMS_FILE_PATH, alarms);
+                return { success: true, alarm };
+            }
+            return { success: false, error: 'Alarm not found' };
+        } catch (error) {
+            console.error(`[IPC] Error marking alarm ${alarmId} as triggered:`, error);
+            return { success: false, error: error.message };
+        }
+    });
+ 
+    // --- SettingsManager IPC Handlers ---
+    ipcMain.handle('settings:get-font-settings', async () => {
+      try {
+        // Directly return the result of settingsManager.getFontSettings()
+        // The settingsManager.getFontSettings() already returns the correct structure.
+        return settingsManager.getFontSettings();
+      } catch (error) {
+        console.error("Error in 'settings:get-font-settings' handler:", error);
+        // Return a default structure on error to prevent frontend breaking
+        return { defaultFont: "System Default", availableFonts: [] };
+      }
+    });
+
+    ipcMain.handle('settings:get-available-fonts', async () => {
+        try {
+            const availableFonts = await settingsManager.getAvailableFonts();
+            return { success: true, fonts: availableFonts };
+        } catch (error) {
+            console.error('[IPC] Error getting available fonts:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('settings:save-default-font', async (_, fontName) => {
+        try {
+            await settingsManager.saveDefaultFont(fontName);
+            // Also re-apply to current window immediately if needed, or let renderer handle it.
+            // For now, just save. Renderer should re-fetch or apply.
+            return { success: true };
+        } catch (error) {
+            console.error(`[IPC] Error saving default font "${fontName}":`, error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('settings:get-global-setting', async (_, key) => {
+        try {
+            const value = await settingsManager.getGlobalSetting(key);
+            return { success: true, value };
+        } catch (error) {
+            console.error(`[IPC] Error getting global setting "${key}":`, error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('settings:save-global-setting', async (event, { key, value }) => {
+        try {
+            // Check if the event sender still exists to prevent "Object has been destroyed" errors
+            if (event.sender.isDestroyed()) {
+                console.warn(`[IPC] Cannot save global setting "${key}": sender has been destroyed`);
+                return { success: false, error: 'Sender window has been destroyed' };
+            }
+            
+            await settingsManager.saveGlobalSetting(key, value);
+            console.log(`[IPC] Successfully saved global setting "${key}" = "${value}"`);
+            return { success: true };
+        } catch (error) {
+            console.error(`[IPC] Error saving global setting "${key}" to "${value}":`, error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('settings:get-model-details', async (_, modelId) => {
+        try {
+            const modelDetails = settingsManager.getModelById(modelId);
+            if (!modelDetails) {
+                console.error(`[IPC] settings:get-model-details: Model not found for ID: ${modelId}`);
+                return { success: false, error: `Model not found for ID: ${modelId}` };
+            }
+            return { success: true, details: modelDetails };
+        } catch (error) {
+            console.error(`[IPC] Error in 'settings:get-model-details' handler for ID ${modelId}:`, error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // --- Window Control IPC Handler ---
+    ipcMain.on('window-control', (event, action) => {
+        if (!mainWindow) return;
+        switch (action) {
+            case 'minimize':
+                mainWindow.minimize();
+                break;
+            case 'maximize':
+                if (mainWindow.isMaximized()) {
+                    mainWindow.unmaximize();
+                } else {
+                    mainWindow.maximize();
+                }
+                // Sending status back is handled by main.js 'maximize'/'unmaximize' events
+                break;
+            case 'close':
+                mainWindow.close();
+                break;
+            default:
+                console.warn(`[IPC] Unknown window-control action: ${action}`);
+        }
+    });
+
+    // --- Personality Management IPC Handlers ---
+    ipcMain.handle('get-context-sets', async () => {
+        try {
+            const contextSets = settingsManager.getContextSets();
+            return { success: true, contextSets };
+        } catch (error) {
+            console.error('[IPC] Error getting context sets:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('get-prompt-content', async (_, promptId) => {
+        try {
+            const prompts = settingsManager.getPrompts();
+            const prompt = prompts.find(p => p.id === promptId);
+            
+            if (!prompt) {
+                return { success: false, error: 'Prompt not found' };
+            }
+
+            // Read the prompt file content
+            const promptPath = path.resolve(prompt.path);
+            if (!fs.existsSync(promptPath)) {
+                return { success: false, error: 'Prompt file not found' };
+            }
+
+            const content = fs.readFileSync(promptPath, 'utf8');
+            return { success: true, content };
+        } catch (error) {
+            console.error(`[IPC] Error getting prompt content for ${promptId}:`, error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('save-personality', async (_, personalityData) => {
+        try {
+            console.log('[IPC] Saving personality:', personalityData.name);
+            
+            // Validate required fields
+            if (!personalityData.name || !personalityData.modelId) {
+                return { success: false, error: 'Name and model are required' };
+            }
+
+            let personalities = settingsManager.getPersonalities();
+            let prompts = settingsManager.getPrompts();
+            
+            // Generate ID for new personality
+            if (!personalityData.id) {
+                personalityData.id = personalityData.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+                
+                // Ensure unique ID
+                let counter = 1;
+                let baseId = personalityData.id;
+                while (personalities.find(p => p.id === personalityData.id)) {
+                    personalityData.id = `${baseId}-${counter}`;
+                    counter++;
+                }
+            }
+
+            // Create prompt file if there's prompt content
+            let promptId = null;
+            if (personalityData.promptContent && personalityData.promptContent.trim()) {
+                promptId = `${personalityData.id}-prompt`;
+                const promptPath = path.join(pathManager.getPromptsDir(), `${promptId}.md`);
+                
+                // Ensure prompt directory exists
+                const promptDir = pathManager.getPromptsDir();
+                if (!fs.existsSync(promptDir)) {
+                    fs.mkdirSync(promptDir, { recursive: true });
+                }
+                
+                // Write prompt file
+                fs.writeFileSync(promptPath, personalityData.promptContent, 'utf8');
+                
+                // Add to prompts array if not already there
+                const relativePath = path.relative(pathManager.isDevelopment() ? process.cwd() : pathManager.userDataPath, promptPath);
+                if (!prompts.find(p => p.id === promptId)) {
+                    prompts.push({
+                        id: promptId,
+                        name: `${personalityData.name} Prompt`,
+                        path: relativePath
+                    });
+                }
+            }
+
+            // Create personality object
+            const personality = {
+                id: personalityData.id,
+                name: personalityData.name,
+                icon: personalityData.icon || 'src/renderer/media/reg.png',
+                description: personalityData.description || '',
+                promptId: promptId || 'vanilla-prompt',
+                availableContextSetIds: personalityData.availableContextSetIds || [],
+                defaultContextSetIds: personalityData.defaultContextSetIds || [],
+                tools: personalityData.tools || [],
+                modelId: personalityData.modelId,
+                allowCustomInstructions: true,
+                customInstructions: personalityData.customInstructions || '',
+                disabled: false // New personalities are enabled by default
+            };
+
+            // Update or add personality
+            const existingIndex = personalities.findIndex(p => p.id === personalityData.id);
+            if (existingIndex >= 0) {
+                personalities[existingIndex] = personality;
+            } else {
+                personalities.push(personality);
+            }
+
+            // Save to config
+            await settingsManager.savePersonalities(personalities);
+            await settingsManager.savePrompts(prompts);
+
+            console.log(`[IPC] Successfully saved personality: ${personality.name} (${personality.id})`);
+            return { success: true, personality };
+        } catch (error) {
+            console.error('[IPC] Error saving personality:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('delete-personality', async (_, personalityId) => {
+        try {
+            console.log(`[IPC] Deleting personality: ${personalityId}`);
+            
+            let personalities = settingsManager.getPersonalities();
+            const personality = personalities.find(p => p.id === personalityId);
+            
+            if (!personality) {
+                return { success: false, error: 'Personality not found' };
+            }
+
+            // Remove personality from array
+            personalities = personalities.filter(p => p.id !== personalityId);
+
+            // Optionally clean up prompt file (be careful not to delete shared prompts)
+            if (personality.promptId && personality.promptId.includes(personalityId)) {
+                try {
+                    const prompts = settingsManager.getPrompts();
+                    const prompt = prompts.find(p => p.id === personality.promptId);
+                    if (prompt) {
+                        // Resolve path properly for both dev and production
+                        let promptPath;
+                        if (path.isAbsolute(prompt.path)) {
+                            promptPath = prompt.path;
+                        } else {
+                            const basePath = pathManager.isDevelopment() ? process.cwd() : pathManager.userDataPath;
+                            promptPath = path.join(basePath, prompt.path);
+                        }
+                        
+                        if (fs.existsSync(promptPath)) {
+                            fs.unlinkSync(promptPath);
+                        }
+                        
+                        // Remove from prompts array
+                        const updatedPrompts = prompts.filter(p => p.id !== personality.promptId);
+                        await settingsManager.savePrompts(updatedPrompts);
+                    }
+                } catch (promptError) {
+                    console.warn(`[IPC] Could not clean up prompt file for ${personalityId}:`, promptError);
+                }
+            }
+
+            // Save updated personalities
+            await settingsManager.savePersonalities(personalities);
+
+            console.log(`[IPC] Successfully deleted personality: ${personalityId}`);
+            return { success: true };
+        } catch (error) {
+            console.error(`[IPC] Error deleting personality ${personalityId}:`, error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('toggle-personality-availability', async (_, { personalityId, enabled }) => {
+        try {
+            console.log(`[IPC] Toggling personality availability: ${personalityId} -> ${enabled}`);
+            
+            let personalities = settingsManager.getPersonalities();
+            const personality = personalities.find(p => p.id === personalityId);
+            
+            if (!personality) {
+                return { success: false, error: 'Personality not found' };
+            }
+
+            // Update disabled status
+            personality.disabled = !enabled;
+
+            // Save updated personalities
+            await settingsManager.savePersonalities(personalities);
+
+            console.log(`[IPC] Successfully toggled personality availability: ${personalityId} -> ${enabled ? 'enabled' : 'disabled'}`);
+            return { success: true };
+        } catch (error) {
+            console.error(`[IPC] Error toggling personality availability for ${personalityId}:`, error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // --- File Management IPC Handlers ---
+    ipcMain.handle('browse-context-files', async () => {
+        try {
+            console.log('[IPC] Opening file browser for context files');
+            
+            const supportedExtensions = fileConverter.getSupportedExtensions();
+            const result = await dialog.showOpenDialog(mainWindow, {
+                title: 'Select Context Files',
+                properties: ['openFile', 'multiSelections'],
+                filters: [
+                    { name: 'Supported Files', extensions: supportedExtensions.map(ext => ext.substring(1)) },
+                    { name: 'Text Files', extensions: ['txt'] },
+                    { name: 'PDF Files', extensions: ['pdf'] },
+                    { name: 'Word Documents', extensions: ['docx'] },
+                    { name: 'Excel Files', extensions: ['xlsx', 'xls'] },
+                    { name: 'CSV Files', extensions: ['csv'] },
+                    { name: 'RTF Files', extensions: ['rtf'] },
+                    { name: 'All Files', extensions: ['*'] }
+                ]
+            });
+
+            if (result.canceled) {
+                return { success: true, files: [] };
+            }
+
+            return { success: true, files: result.filePaths };
+        } catch (error) {
+            console.error('[IPC] Error browsing context files:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('convert-and-add-context-files', async (_, filePaths) => {
+        try {
+            console.log(`[IPC] Converting ${filePaths.length} files to context`);
+            
+            const results = [];
+            const errors = [];
+
+            for (const filePath of filePaths) {
+                console.log(`[IPC] Converting file: ${filePath}`);
+                
+                if (!fileConverter.isSupportedFile(filePath)) {
+                    errors.push(`Unsupported file type: ${path.basename(filePath)}`);
+                    continue;
+                }
+
+                const conversionResult = await fileConverter.convertFileToText(filePath);
+                
+                if (!conversionResult.success) {
+                    errors.push(`Failed to convert ${path.basename(filePath)}: ${conversionResult.error}`);
+                    continue;
+                }
+
+                const saveResult = await fileConverter.saveAsContextFile(
+                    conversionResult.content,
+                    path.basename(filePath)
+                );
+
+                if (!saveResult.success) {
+                    errors.push(`Failed to save ${path.basename(filePath)}: ${saveResult.error}`);
+                    continue;
+                }
+
+                results.push(saveResult.contextFile);
+            }
+
+            // Update context sets in settings if files were successfully converted
+            if (results.length > 0) {
+                try {
+                    let contextSets = settingsManager.getContextSets();
+                    
+                    // Add new context files to the context sets
+                    results.forEach(contextFile => {
+                        contextSets.push({
+                            id: contextFile.id,
+                            name: contextFile.name,
+                            path: contextFile.relativePath,
+                            type: 'user-uploaded',
+                            createdAt: contextFile.createdAt,
+                            originalFile: contextFile.originalFile
+                        });
+                    });
+
+                    await settingsManager.saveContextSets(contextSets);
+                    console.log(`[IPC] Successfully added ${results.length} context files`);
+                } catch (saveError) {
+                    console.error('[IPC] Error saving context sets:', saveError);
+                    errors.push('Failed to update context sets configuration');
+                }
+            }
+
+            return {
+                success: true,
+                addedFiles: results,
+                errors: errors.length > 0 ? errors : null,
+                summary: `Successfully processed ${results.length} out of ${filePaths.length} files`
+            };
+        } catch (error) {
+            console.error('[IPC] Error converting context files:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('delete-context-file', async (_, contextFileId) => {
+        try {
+            console.log(`[IPC] Deleting context file: ${contextFileId}`);
+            
+            let contextSets = settingsManager.getContextSets();
+            const contextFile = contextSets.find(cs => cs.id === contextFileId);
+            
+            if (!contextFile) {
+                return { success: false, error: 'Context file not found' };
+            }
+
+            // Delete the actual file if it's a user-uploaded file
+            if (contextFile.type === 'user-uploaded' && contextFile.path) {
+                // Resolve path properly for both dev and production
+                let fullPath;
+                if (path.isAbsolute(contextFile.path)) {
+                    fullPath = contextFile.path;
+                } else {
+                    const basePath = pathManager.isDevelopment() ? process.cwd() : pathManager.userDataPath;
+                    fullPath = path.join(basePath, contextFile.path);
+                }
+                
+                if (fs.existsSync(fullPath)) {
+                    fs.unlinkSync(fullPath);
+                }
+            }
+
+            // Remove from context sets
+            contextSets = contextSets.filter(cs => cs.id !== contextFileId);
+            await settingsManager.saveContextSets(contextSets);
+
+            console.log(`[IPC] Successfully deleted context file: ${contextFileId}`);
+            return { success: true };
+        } catch (error) {
+            console.error(`[IPC] Error deleting context file ${contextFileId}:`, error);
+            return { success: false, error: error.message };
         }
     });
 

@@ -39,7 +39,92 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
   let typingBubble = null;
   let loadingBubbleElement = null;
   let isInputExpanded = false; // Track expanded state
+  const settingsManager = window.electronAPI.settingsManager; // Added for font settings
+
+  // --- State for Timers, Alarms, Notifications ---
+  let activeTimers = [];
+  let activeAlarms = [];
+  let timersAlarmsInterval = null;
+  const TIMERS_ALARMS_FILE_CHECK_INTERVAL = 5000; // How often to re-fetch from files (e.g., if another instance changes them) - maybe too frequent
+  const TIMERS_ALARMS_UI_UPDATE_INTERVAL = 1000; // How often to check and update UI for countdowns/triggering
+
   // --- End State ---
+
+  // --- Apply Initial Font ---
+  async function applyInitialFont() {
+    try {
+      // The IPC handler 'settings:get-font-settings' now directly returns the fontSettings object
+      const fontSettings = await window.electronAPI.invoke('settings:get-font-settings');
+      // Add comprehensive logging
+      console.log('[App] Received fontSettings for initial apply:', JSON.stringify(fontSettings));
+
+      if (fontSettings && fontSettings.defaultFont && Array.isArray(fontSettings.availableFonts)) {
+        const defaultFontName = fontSettings.defaultFont;
+        // Ensure availableFonts is not undefined before calling find
+        const defaultFontObject = fontSettings.availableFonts.find(f => f.name === defaultFontName);
+
+        if (defaultFontObject && defaultFontObject.cssName) {
+          document.body.style.setProperty('--font-family-base', defaultFontObject.cssName);
+          console.log(`[App] Initial font applied: ${defaultFontName} (${defaultFontObject.cssName})`);
+        } else {
+          console.warn(`[App] Default font '${defaultFontName}' not found in availableFonts or missing cssName. Using fallback.`);
+          // Apply a very safe fallback if default isn't found
+          document.body.style.setProperty('--font-family-base', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif');
+        }
+      } else {
+        console.error('[App] Invalid or incomplete fontSettings received for initial apply. Using fallback.', fontSettings);
+        document.body.style.setProperty('--font-family-base', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif');
+      }
+    } catch (error) {
+      console.error('[App] Error applying initial font:', error);
+      // Apply a very safe fallback on error
+      document.body.style.setProperty('--font-family-base', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif');
+    }
+  }
+
+  // --- Apply Theme ---
+  function applyTheme(themeName) {
+    // Remove existing theme classes
+    document.body.classList.remove('theme-dark', 'theme-light');
+    
+    // Apply new theme class (only for dark and light, default has no class)
+    if (themeName === 'dark') {
+        document.body.classList.add('theme-dark');
+    } else if (themeName === 'light') {
+        document.body.classList.add('theme-light');
+    }
+    // For 'default' theme, no class is added (uses :root variables)
+    
+    console.log(`[App] Theme applied: ${themeName}`);
+  }
+
+  // --- Apply Initial Theme ---
+  async function applyInitialTheme() {
+    try {
+      const result = await window.electronAPI.settingsManager.getGlobalSetting('theme');
+      console.log(`[App] getGlobalSetting result:`, result);
+      
+      // Handle the result properly based on the IPC response format
+      let currentTheme;
+      if (result && result.success) {
+        currentTheme = result.value;
+      } else if (typeof result === 'string') {
+        // Direct string value (older format)
+        currentTheme = result;
+      } else {
+        console.warn('[App] Unexpected theme result format:', result);
+        currentTheme = null;
+      }
+      
+      const themeToApply = currentTheme || 'dark'; // Default to dark if not set
+      console.log(`[App] Initial theme loaded: ${themeToApply} (from: ${currentTheme})`);
+      applyTheme(themeToApply);
+    } catch (error) {
+      console.error('[App] Error loading initial theme:', error);
+      // Apply default theme on error
+      applyTheme('dark');
+    }
+  }
 
   // --- Fetch Config ---
   async function fetchConfig() {
@@ -236,6 +321,9 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
     messageIndexCounter = Math.ceil(historyLength / 2);
   };
 
+  // Expose theme function for settings modal
+  window.applyTheme = applyTheme;
+
   // --- Event Listeners ---
   userInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -320,23 +408,13 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
   function appendMessage(sender, text, index) {
     const bubbleElements = createBubble(sender, text, index);
     chatWindow.appendChild(bubbleElements.container);
-    // Only scroll down if already near the bottom
-    if (isScrolledToBottom(chatWindow)) {
-        chatWindow.scrollTop = chatWindow.scrollHeight;
+    // Use the intelligent scroll function from chatHistory.js
+    if (window.chatHistoryScrollToBottomIfAppropriate) {
+      window.chatHistoryScrollToBottomIfAppropriate();
     }
   }
 
-  // --- Helper function to check scroll position ---
-  function isScrolledToBottom(element, threshold = 10) {
-      // Check if the scroll height is greater than the client height (i.e., is there actually a scrollbar?)
-      const hasScrollbar = element.scrollHeight > element.clientHeight;
-      if (!hasScrollbar) {
-          return true; // If no scrollbar, it's effectively "at the bottom"
-      }
-      // Check if scrolled within the threshold of the bottom
-      return element.scrollHeight - element.scrollTop <= element.clientHeight + threshold;
-  }
-  // --- End Helper ---
+  // --- Helper function isScrolledToBottom is removed as its logic is now in chatHistory.js ---
 
 
   function createBubble(sender, text, messageId = null) {
@@ -561,9 +639,9 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
     } else {
         console.warn("StreamPartialResponse: typingBubble or bubble is null.");
     }
-    // Only scroll down if already near the bottom
-    if (isScrolledToBottom(chatWindow)) {
-        chatWindow.scrollTop = chatWindow.scrollHeight;
+    // Use the intelligent scroll function from chatHistory.js
+    if (window.chatHistoryScrollToBottomIfAppropriate) {
+      window.chatHistoryScrollToBottomIfAppropriate();
     }
   });
 
@@ -573,14 +651,18 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
         typingBubble.rawText = data.text;
         if (typingBubble.bubble) {
             typingBubble.bubble.innerHTML = marked.parse(data.text);
+            // Call intelligent scroll after updating the bubble
+            if (window.chatHistoryScrollToBottomIfAppropriate) {
+              window.chatHistoryScrollToBottomIfAppropriate();
+            }
         } else {
              console.warn("StreamFinalResponse: typingBubble.bubble is null.");
-             appendMessage('bot', data.text); // Fallback
+             appendMessage('bot', data.text); // Fallback, appendMessage will handle scroll
         }
         typingBubble = null;
     } else {
         console.log("StreamFinalResponse: No typing bubble, creating final message.");
-        appendMessage('bot', data.text);
+        appendMessage('bot', data.text); // appendMessage will handle scroll
     }
     messageIndexCounter++; // Increment counter after full response
     if (window.hideLoadingIndicator) {
@@ -591,7 +673,11 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
   });
 
   window.electronAPI.onMessage('functionCallResponse', (data) => {
-    appendMessage('bot', "Tool executed: " + data.text);
+    // This channel might be deprecated if 'tool-execution-result' is used for tool UI effects.
+    // For now, keep its original behavior of just logging the text.
+    // The actual tool-specific UI updates (like showing a native notification)
+    // will be handled by 'tool-execution-result'.
+    appendMessage('bot', "Tool action processed. Result: " + data.text);
     messageIndexCounter++; // Increment after tool response
     removeInlineLoadingBubble();
      if (window.hideLoadingIndicator) {
@@ -600,6 +686,52 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
          console.warn("hideLoadingIndicator function not found.");
      }
   });
+
+  // Listener for results of tool executions, for UI side effects
+  window.electronAPI.onMessage('tool-execution-result', (data) => {
+    console.log('[App] Received tool-execution-result:', data);
+    const { toolName, result, chatIdFromMain } = data; // Assuming main.js sends chatId
+
+    if (result && result.success) {
+        if (toolName === 'create_notification' && result.data) {
+            const currentChatId = window.getCurrentChatId ? window.getCurrentChatId() : chatIdFromMain;
+            if (!currentChatId) {
+                console.error("[App] Cannot show notification: currentChatId is unavailable.");
+                return;
+            }
+            console.log(`[App] Requesting native notification for chat ${currentChatId}: Title: ${result.data.title}, Body: ${result.data.body}`);
+            window.electronAPI.sendMessage('show-native-notification', {
+                title: result.data.title,
+                body: result.data.body,
+                chatId: currentChatId
+            });
+        } else if (toolName === 'create_alarm' || toolName === 'start_timer') {
+            console.log(`[App] ${toolName} executed successfully. Reloading timers/alarms.`);
+            loadTimersAndAlarms(); // Refresh UI
+        }
+        // Display success message from tool in chat (optional, could be part of model's next response)
+        // appendMessage('system', `${toolName} successful: ${result.message}`);
+    } else if (result && !result.success) {
+        // Display error message from tool in chat (optional)
+        // appendMessage('system', `Error with ${toolName}: ${result.error}`);
+        console.error(`[App] Tool ${toolName} execution failed:`, result.error);
+    }
+  });
+
+  window.electronAPI.onMessage('native-notification-clicked', (chatId) => {
+    console.log(`[App] Native notification clicked, loading chat ID: ${chatId}`);
+    if (window.loadChat && chatId) { // loadChat is from chatHistory.js
+        window.loadChat(chatId);
+    } else {
+        console.warn('[App] window.loadChat function not available or chatId missing for notification click.');
+    }
+  });
+
+  window.electronAPI.onMessage('show-in-app-notification-fallback', (data) => {
+    console.log('[App] Showing in-app notification fallback:', data);
+    showInAppAlert('info', data.title, data.body, data.chatId);
+  });
+
 
   // --- Listener for newly saved chats ---
   window.electronAPI.onMessage('new-chat-saved', (chatData) => {
@@ -628,9 +760,9 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
     bubble.appendChild(spinner);
     container.appendChild(bubble);
     chatWindow.appendChild(container);
-    // Only scroll down if already near the bottom
-    if (isScrolledToBottom(chatWindow)) {
-        chatWindow.scrollTop = chatWindow.scrollHeight;
+    // Use the intelligent scroll function from chatHistory.js
+    if (window.chatHistoryScrollToBottomIfAppropriate) {
+      window.chatHistoryScrollToBottomIfAppropriate();
     }
     loadingBubbleElement = container;
   }
@@ -723,8 +855,232 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
     isInputExpanded = false;
   }
 
+  // --- Timer and Alarm UI & Logic ---
+  const timersAlarmsContainer = document.getElementById('timersAlarmsContainer'); // Assuming this ID exists in index.html
+  const inAppAlertsContainer = document.getElementById('inAppAlertsContainer'); // Assuming this ID exists
+
+  async function loadTimersAndAlarms() {
+    try {
+        console.log('[App] Loading timers and alarms...');
+        const [timersResult, alarmsResult] = await Promise.all([
+            window.electronAPI.invoke('get-active-timers'),
+            window.electronAPI.invoke('get-active-alarms')
+        ]);
+
+        activeTimers = timersResult.success ? timersResult.timers : [];
+        activeAlarms = alarmsResult.success ? alarmsResult.alarms : [];
+
+        console.log(`[App] Loaded ${activeTimers.length} active timers, ${activeAlarms.length} active alarms.`);
+        renderTimersAndAlarmsUI();
+    } catch (error) {
+        console.error('[App] Error loading timers/alarms:', error);
+        activeTimers = [];
+        activeAlarms = [];
+        renderTimersAndAlarmsUI(); // Render empty state
+    }
+  }
+
+  function renderTimersAndAlarmsUI() {
+    if (!timersAlarmsContainer) {
+        console.warn('[App] timersAlarmsContainer not found in DOM.');
+        return;
+    }
+    timersAlarmsContainer.innerHTML = ''; // Clear existing
+
+    [...activeTimers, ...activeAlarms].forEach(item => {
+        const isTimer = !!item.duration;
+        const itemDiv = document.createElement('div');
+        itemDiv.className = `p-2 mb-1 rounded text-xs ${isTimer ? 'bg-blue-100 dark:bg-blue-800' : 'bg-orange-100 dark:bg-orange-800'} border ${isTimer ? 'border-blue-300 dark:border-blue-600' : 'border-orange-300 dark:border-orange-600'}`;
+
+        const labelSpan = document.createElement('span');
+        labelSpan.textContent = `${item.label || (isTimer ? 'Timer' : 'Alarm')}: `;
+        itemDiv.appendChild(labelSpan);
+
+        const timeSpan = document.createElement('span');
+        timeSpan.id = `${isTimer ? 'timer' : 'alarm'}-${item.id}-time`; // For dynamic updates
+        itemDiv.appendChild(timeSpan);
+
+        if (item.chatId && window.loadChat) {
+            const goToChatBtn = document.createElement('button');
+            goToChatBtn.textContent = 'Go to Chat';
+            goToChatBtn.className = 'ml-2 px-1 py-0.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded text-xs';
+            goToChatBtn.onclick = () => window.loadChat(item.chatId);
+            itemDiv.appendChild(goToChatBtn);
+        }
+
+        const dismissBtn = document.createElement('button');
+        dismissBtn.innerHTML = '&times;'; // '×'
+        dismissBtn.className = 'ml-2 px-1 py-0.5 bg-red-200 dark:bg-red-700 hover:bg-red-300 dark:hover:bg-red-600 rounded text-xs font-bold';
+        dismissBtn.title = "Dismiss";
+        dismissBtn.onclick = async () => {
+            try {
+                if (isTimer) {
+                    await window.electronAPI.invoke('dismiss-timer', item.id);
+                } else {
+                    await window.electronAPI.invoke('dismiss-alarm', item.id);
+                }
+                loadTimersAndAlarms(); // Refresh list
+            } catch (error) {
+                console.error(`[App] Error dismissing ${isTimer ? 'timer' : 'alarm'} ${item.id}:`, error);
+            }
+        };
+        itemDiv.appendChild(dismissBtn);
+        timersAlarmsContainer.appendChild(itemDiv);
+    });
+    updateTimersAndAlarmsDisplay(); // Initial display update
+  }
+
+  function updateTimersAndAlarmsDisplay() {
+    activeTimers.forEach(timer => {
+        const timeElement = document.getElementById(`timer-${timer.id}-time`);
+        if (timeElement) {
+            if (timer.triggered) {
+                timeElement.textContent = 'Ended!';
+                timeElement.closest('div').classList.add('opacity-50');
+            } else {
+                const endTime = timer.startTime + (timer.duration * 1000);
+                const remaining = Math.max(0, endTime - Date.now());
+                const minutes = Math.floor(remaining / 60000);
+                const seconds = Math.floor((remaining % 60000) / 1000);
+                timeElement.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                 if (remaining <= 0) { // Double check for immediate trigger if missed by checkTimersAndAlarms
+                    checkTimersAndAlarms();
+                }
+            }
+        }
+    });
+
+    activeAlarms.forEach(alarm => {
+        const timeElement = document.getElementById(`alarm-${alarm.id}-time`);
+        if (timeElement) {
+            if (alarm.triggered) {
+                timeElement.textContent = 'Triggered!';
+                timeElement.closest('div').classList.add('opacity-50');
+            } else {
+                // Display target time
+                let alarmTimeStr = alarm.time;
+                try {
+                    if (/^\d{2}:\d{2}$/.test(alarm.time)) { // HH:MM format
+                        const [hours, minutes] = alarm.time.split(':');
+                        const alarmDate = new Date();
+                        alarmDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+                        alarmTimeStr = alarmDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    } else { // ISO string
+                        alarmTimeStr = new Date(alarm.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', day: 'numeric', month:'short' });
+                    }
+                } catch (e) { /* use original string if parse fails */ }
+                timeElement.textContent = `at ${alarmTimeStr}`;
+            }
+        }
+    });
+  }
+
+
+  async function checkTimersAndAlarms() {
+    let changed = false;
+    const now = Date.now();
+
+    for (const timer of activeTimers) {
+        if (timer.triggered) continue;
+        const endTime = timer.startTime + (timer.duration * 1000);
+        if (now >= endTime) {
+            timer.triggered = true;
+            changed = true;
+            showInAppAlert('timer', 'Timer Ended!', `${timer.label || 'Your timer'} has finished.`, timer.chatId);
+            try {
+                await window.electronAPI.invoke('mark-timer-triggered', timer.id);
+            } catch (error) {
+                console.error(`[App] Error marking timer ${timer.id} as triggered:`, error);
+            }
+        }
+    }
+
+    for (const alarm of activeAlarms) {
+        if (alarm.triggered) continue;
+        let alarmTime;
+        if (/^\d{2}:\d{2}$/.test(alarm.time)) { // HH:MM format
+            const [hours, minutes] = alarm.time.split(':');
+            alarmTime = new Date();
+            alarmTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+            // If alarm time for today has passed, set it for tomorrow (simple daily alarm)
+            if (alarmTime.getTime() < now && (now - alarmTime.getTime()) > 60000 ) { // Check if it's significantly past
+                 // This logic might need refinement for alarms set for "next HH:MM" vs specific date
+            }
+        } else { // ISO string
+            alarmTime = new Date(alarm.time);
+        }
+
+        if (now >= alarmTime.getTime()) {
+            alarm.triggered = true;
+            changed = true;
+            showInAppAlert('alarm', 'Alarm!', `${alarm.label || 'Your alarm'} is ringing.`, alarm.chatId);
+            try {
+                await window.electronAPI.invoke('mark-alarm-triggered', alarm.id);
+            } catch (error) {
+                console.error(`[App] Error marking alarm ${alarm.id} as triggered:`, error);
+            }
+        }
+    }
+    // Always update display for countdowns
+    updateTimersAndAlarmsDisplay();
+    if (changed) {
+        // If a trigger happened, re-fetch to get the latest state from file (e.g. triggered status)
+        // This might be redundant if mark-timer/alarm-triggered returns the updated list or if UI updates are sufficient
+        // loadTimersAndAlarms();
+    }
+  }
+
+  function showInAppAlert(type, title, message, chatId) {
+    if (!inAppAlertsContainer) {
+        console.warn('[App] inAppAlertsContainer not found in DOM.');
+        return;
+    }
+    const alertId = `alert-${Date.now()}`;
+    const alertDiv = document.createElement('div');
+    alertDiv.id = alertId;
+    alertDiv.className = `p-3 mb-2 rounded-md shadow-lg border ${type === 'timer' ? 'bg-blue-50 dark:bg-blue-900 border-blue-300 dark:border-blue-700' : 'bg-orange-50 dark:bg-orange-900 border-orange-300 dark:border-orange-700'} text-sm relative`;
+
+    const titleEl = document.createElement('h4');
+    titleEl.className = 'font-bold';
+    titleEl.textContent = title;
+    alertDiv.appendChild(titleEl);
+
+    const messageEl = document.createElement('p');
+    messageEl.textContent = message;
+    alertDiv.appendChild(messageEl);
+
+    if (chatId && window.loadChat) {
+        const goToChatBtn = document.createElement('button');
+        goToChatBtn.textContent = 'Go to Chat';
+        goToChatBtn.className = 'mt-2 mr-2 px-2 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded text-xs';
+        goToChatBtn.onclick = () => {
+            window.loadChat(chatId);
+            alertDiv.remove();
+        };
+        alertDiv.appendChild(goToChatBtn);
+    }
+
+    const dismissBtn = document.createElement('button');
+    dismissBtn.textContent = 'Dismiss';
+    dismissBtn.className = 'mt-2 px-2 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded text-xs';
+    dismissBtn.onclick = () => alertDiv.remove();
+    alertDiv.appendChild(dismissBtn);
+
+    inAppAlertsContainer.appendChild(alertDiv);
+    // Auto-dismiss after some time?
+    setTimeout(() => {
+        const stillExists = document.getElementById(alertId);
+        if (stillExists) stillExists.remove();
+    }, 30000); // 30 seconds
+  }
+
+
   // --- Initial Setup ---
-  // Fetch config and populate model selector FIRST
+  // Apply initial theme and font
+  await applyInitialTheme();
+  await applyInitialFont();
+
+  // Fetch config and populate model selector
   await fetchConfig();
 
   // Then fetch personalities
@@ -764,6 +1120,87 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
   }
   // Add listener to backdrop click to close
   inputOverlayBackdrop.addEventListener('click', closeExpandedInput);
+
+  // Load initial timers and alarms, and start checking interval
+  await loadTimersAndAlarms();
+  if (timersAlarmsInterval) clearInterval(timersAlarmsInterval);
+  timersAlarmsInterval = setInterval(checkTimersAndAlarms, TIMERS_ALARMS_UI_UPDATE_INTERVAL);
+
+  // --- Window Controls Logic ---
+  const minimizeBtn = document.getElementById('minimizeBtn');
+  const maximizeBtn = document.getElementById('maximizeBtn');
+  const closeBtn = document.getElementById('closeBtn');
+  const settingsBtn = document.getElementById('settingsBtn');
+
+  if (minimizeBtn) {
+    minimizeBtn.addEventListener('click', () => {
+      window.electronAPI.sendMessage('window-control', 'minimize');
+    });
+  }
+
+  if (maximizeBtn) {
+    maximizeBtn.addEventListener('click', () => {
+      window.electronAPI.sendMessage('window-control', 'maximize');
+    });
+  }
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      window.electronAPI.sendMessage('window-control', 'close');
+    });
+  }
+
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => {
+      console.log('[App] Settings button clicked!');
+      const settingsModal = document.getElementById('settingsModal');
+      console.log('[App] Settings modal element:', settingsModal);
+      console.log('[App] Settings modal classes before:', settingsModal?.className);
+      if (settingsModal) {
+        settingsModal.style.display = 'flex'; // Assuming modal uses flex for layout
+        settingsModal.style.visibility = 'visible'; // Ensure visibility
+        settingsModal.style.opacity = '1'; // Ensure opacity
+        
+        // // Add debugging styles to ensure visibility
+        // settingsModal.style.display = 'flex';
+        // settingsModal.style.position = 'fixed';
+        // settingsModal.style.top = '0';
+        // settingsModal.style.left = '0';
+        // settingsModal.style.width = '100vw';
+        // settingsModal.style.height = '100vh';
+        // settingsModal.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        // settingsModal.style.zIndex = '9999';
+        
+        // console.log('[App] Settings modal classes after removing hidden:', settingsModal.className);
+        // console.log('[App] Applied inline styles for debugging');
+        // console.log('[App] Settings modal computed style display:', getComputedStyle(settingsModal).display);
+        // console.log('[App] Settings modal computed style visibility:', getComputedStyle(settingsModal).visibility);
+      } else {
+        console.error('[App] Settings modal not found in DOM');
+      }
+    });
+    console.log('[App] Settings button event listener added successfully');
+  } else {
+    console.error('[App] Settings button not found in DOM');
+  }
+
+  // Listen for maximized status from main process
+  window.electronAPI.onMessage('window-maximized-status', (isMaximized) => {
+    if (maximizeBtn) {
+      const icon = maximizeBtn.querySelector('i');
+      if (icon) {
+        if (isMaximized) {
+          icon.classList.remove('fa-window-maximize');
+          icon.classList.add('fa-window-restore');
+          maximizeBtn.setAttribute('aria-label', 'Restore');
+        } else {
+          icon.classList.remove('fa-window-restore');
+          icon.classList.add('fa-window-maximize');
+          maximizeBtn.setAttribute('aria-label', 'Maximize');
+        }
+      }
+    }
+  });
 
   console.log("[App] Frontend initialized.");
 });

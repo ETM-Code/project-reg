@@ -1,7 +1,7 @@
 {
-    "name": "project-reg",
+    "name": "reg",
     "version": "1.0.0",
-    "description": "An Electron-based chatbot using Gemini 2.0 flash with streaming, voice toggling, and integrated tools.",
+    "description": "A productivity AI chatbot",
     "main": "main.js",
     "scripts": {
         "start": "electron .",
@@ -17,7 +17,12 @@
         "googleapis": "^105.0.0",
         "openai": "^4.2.1",
         "tailwindcss": "^3.2.0",
-        "tiktoken": "^1.0.20"
+        "tiktoken": "^1.0.20",
+        "pdf-parse": "^1.1.1",
+        "mammoth": "^1.6.0",
+        "xlsx": "^0.18.5",
+        "rtf-parser": "^1.1.0",
+        "electron-store": "^8.1.0"
     },
     "devDependencies": {
         "electron": "^35.1.5",
@@ -32,10 +37,20 @@
             "dataInitializer.js",
             "src/**/*",
             "data/**/*",
-            ".env"
+            ".env",
+            "!data/chats/**/*",
+            "!data/token_usage/**/*",
+            "!data/context/**/*"
         ],
         "directories": {
             "output": "dist"
-        }
+        },
+        "extraResources": [
+            {
+                "from": "data",
+                "to": "data",
+                "filter": ["**/*", "!chats/**/*", "!token_usage/**/*", "!context/**/*"]
+            }
+        ]
     }
 }

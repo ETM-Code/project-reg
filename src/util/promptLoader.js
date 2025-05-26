@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const settingsManager = require('../config/settingsManager'); // Import settingsManager
+const { app } = require('electron'); // Import app
 
 /**
  * Loads the content of a prompt file specified by its ID in the configuration.
@@ -16,13 +17,15 @@ function loadPromptById(promptId) {
       return '';
     }
 
-    // Use the absolute path resolved by settingsManager
-    const absolutePromptPath = settingsManager.getPaths().promptsDir
-        ? path.join(settingsManager.getPaths().promptsDir, path.basename(promptConfig.path)) // Construct path relative to configured dir
-        : path.resolve(path.join(__dirname, '..', '..'), promptConfig.path); // Fallback to project root relative if dir not set
+    // Resolve the prompt path directly relative to the application root
+    const appRoot = app.getAppPath();
+    // promptConfig.path is like "src/prompt/regLifecoachPrompt.md"
+    const absolutePromptPath = path.resolve(appRoot, promptConfig.path);
 
     console.log(`[promptLoader] Attempting to load prompt from: ${absolutePromptPath}`);
 
+    // Use asynchronous readFile for better practice, though sync is often okay in main process init
+    // Sticking with sync for now to minimize changes, but consider async later.
     if (fs.existsSync(absolutePromptPath)) {
       return fs.readFileSync(absolutePromptPath, 'utf-8');
     } else {

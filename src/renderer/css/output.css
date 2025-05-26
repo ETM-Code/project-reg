@@ -2233,3 +2233,48 @@ body {
 .group:hover .group-hover\:opacity-100 {
   opacity: 1;
 }
+/* Custom styles for Timers and Alarms */
+#timersAlarmsContainer .bg-blue-100 { background-color: var(--timer-bg-color, #ebf8ff); }
+#timersAlarmsContainer .dark .bg-blue-800 { background-color: var(--timer-bg-color-dark, #2c5282); }
+#timersAlarmsContainer .border-blue-300 { border-color: var(--timer-border-color, #90cdf4); }
+#timersAlarmsContainer .dark .border-blue-600 { border-color: var(--timer-border-color-dark, #4a5568); }
+
+#timersAlarmsContainer .bg-orange-100 { background-color: var(--alarm-bg-color, #fffaf0); }
+#timersAlarmsContainer .dark .bg-orange-800 { background-color: var(--alarm-bg-color-dark, #7b341e); }
+#timersAlarmsContainer .border-orange-300 { border-color: var(--alarm-border-color, #fbd38d); }
+#timersAlarmsContainer .dark .border-orange-600 { border-color: var(--alarm-border-color-dark, #975a16); }
+
+#inAppAlertsContainer .bg-blue-50 { background-color: var(--info-alert-bg-color, #ebf8ff); }
+#inAppAlertsContainer .dark .bg-blue-900 { background-color: var(--info-alert-bg-color-dark, #1a365d); }
+#inAppAlertsContainer .border-blue-300 { border-color: var(--info-alert-border-color, #90cdf4); }
+#inAppAlertsContainer .dark .border-blue-700 { border-color: var(--info-alert-border-color-dark, #2c5282); }
+
+#inAppAlertsContainer .bg-orange-50 { background-color: var(--warning-alert-bg-color, #fffaf0); }
+#inAppAlertsContainer .dark .bg-orange-900 { background-color: var(--warning-alert-bg-color-dark, #652b19); }
+#inAppAlertsContainer .border-orange-300 { border-color: var(--warning-alert-border-color, #fbd38d); }
+#inAppAlertsContainer .dark .border-orange-700 { border-color: var(--warning-alert-border-color-dark, #7b341e); }
+
+/* Ensure these variables are defined in themes.css or a general variables section */
+/*
+:root {
+  --timer-bg-color: #ebf8ff;
+  --timer-bg-color-dark: #2c5282;
+  --timer-border-color: #90cdf4;
+  --timer-border-color-dark: #4a5568;
+
+  --alarm-bg-color: #fffaf0;
+  --alarm-bg-color-dark: #7b341e;
+  --alarm-border-color: #fbd38d;
+  --alarm-border-color-dark: #975a16;
+
+  --info-alert-bg-color: #ebf8ff;
+  --info-alert-bg-color-dark: #1a365d;
+  --info-alert-border-color: #90cdf4;
+  --info-alert-border-color-dark: #2c5282;
+
+  --warning-alert-bg-color: #fffaf0;
+  --warning-alert-bg-color-dark: #652b19;
+  --warning-alert-border-color: #fbd38d;
+  --warning-alert-border-color-dark: #7b341e;
+}
+*/

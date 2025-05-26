@@ -150,7 +150,7 @@ class OpenAIReasoningChat extends AIModelInterface {
    * Returns the specific model ID identifier.
    * @returns {string}
    */
-  getModelId() { // Renamed method
+  getModelName() { // Match interface
     if (!this.modelId) {
         throw new Error("Model ID not set. Call initialize() first.");
     }
