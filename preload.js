@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const allowedSendChannels = [
           'chatMessage',
           'edit-message',
+          'stop-stream', // Added for stopping streams
           'show-native-notification', // Added for sending notification requests
           'window-control' // Added for window controls
       ];
@@ -20,6 +21,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const allowedReceiveChannels = [
           'streamPartialResponse',
           'streamFinalResponse',
+          'streamError', // Added for stream errors
+          'streamStopped', // Added for stream stop confirmations
           'functionCallResponse', // This is where tool results come back to renderer
           'tool-execution-result', // Added for tool execution UI updates
           'new-chat-saved', // Added for new chat save notifications
@@ -119,6 +122,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMessageAllowedChannels: [
       'streamPartialResponse',
       'streamFinalResponse',
+      'streamError', // Added for stream errors
+      'streamStopped', // Added for stream stop confirmations
       'functionCallResponse',
       'tool-execution-result',
       'new-chat-saved',

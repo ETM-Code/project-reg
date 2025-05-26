@@ -39,6 +39,8 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
   let typingBubble = null;
   let loadingBubbleElement = null;
   let isInputExpanded = false; // Track expanded state
+  let isStreaming = false; // Track if AI is currently streaming a response
+  let currentStreamAbortController = null; // Controller to abort current stream
   const settingsManager = window.electronAPI.settingsManager; // Added for font settings
 
   // --- State for Timers, Alarms, Notifications ---
@@ -360,6 +362,12 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
 
   // --- Message Handling ---
   function handleSendOrSave() {
+    // If currently streaming, stop the stream instead
+    if (isStreaming) {
+      stopCurrentStream();
+      return;
+    }
+
     const sourceInput = isInputExpanded ? expandedUserInput : userInput;
     const message = sourceInput.value.trim();
 
@@ -389,6 +397,9 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
     // Message trimming and validation already happened in handleSendOrSave
     if (!modelSelector || modelSelector.disabled) return; // Don't send if selector disabled
 
+    // Set streaming state before sending
+    setStreamingState(true);
+
     const currentIndex = messageIndexCounter;
     appendMessage('user', message, currentIndex); // Pass index
     messageIndexCounter++;
@@ -402,6 +413,10 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
 
     const model = modelSelector.value; // Read selected model from the hidden select
     console.log(`[App] Sending message with model: ${model}`);
+    
+    // Create abort controller for this request
+    currentStreamAbortController = new AbortController();
+    
     window.electronAPI.sendMessage('chatMessage', { message, model });
   }
 
@@ -525,6 +540,9 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
     try {
       console.log(`Sending edit request for chat ${editingChatId}, message ID ${editingMessageId}`);
 
+      // Set streaming state for edit
+      setStreamingState(true);
+
       // --- Immediate UI Update ---
       let elementToRemove = editingContainerElement.nextElementSibling;
       while (elementToRemove) {
@@ -565,13 +583,15 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
       }
       // --- End Immediate UI Update ---
 
-
       if (window.showLoadingIndicator) {
           window.showLoadingIndicator();
           createInlineLoadingBubble();
       } else {
           console.warn("showLoadingIndicator function not found.");
       }
+
+      // Create abort controller for edit request
+      currentStreamAbortController = new AbortController();
 
       window.electronAPI.sendMessage('edit-message', {
           chatId: editingChatId,
@@ -582,6 +602,9 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
     } catch (error) {
       console.error("Error during saveEdit:", error);
       alert("An error occurred while trying to save the edit.");
+      // Reset streaming state on error
+      setStreamingState(false);
+      currentStreamAbortController = null;
     }
     cancelEdit(); // Reset editing state
   }
@@ -647,6 +670,11 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
 
   window.electronAPI.onMessage('streamFinalResponse', (data) => {
     removeInlineLoadingBubble();
+    
+    // Reset streaming state
+    setStreamingState(false);
+    currentStreamAbortController = null;
+    
     if (typingBubble) {
         typingBubble.rawText = data.text;
         if (typingBubble.bubble) {
@@ -669,6 +697,52 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
         window.hideLoadingIndicator();
     } else {
         console.warn("hideLoadingIndicator function not found.");
+    }
+  });
+
+  window.electronAPI.onMessage('streamError', (data) => {
+    console.error('[App] Stream error received:', data);
+    
+    // Reset streaming state on error
+    setStreamingState(false);
+    currentStreamAbortController = null;
+    
+    removeInlineLoadingBubble();
+    if (window.hideLoadingIndicator) {
+        window.hideLoadingIndicator();
+    }
+    
+    // Show error message
+    if (data.message) {
+      appendMessage('system', `Error: ${data.message}`);
+      messageIndexCounter++;
+    }
+    
+    // Clean up typing bubble if it exists
+    if (typingBubble) {
+      typingBubble = null;
+    }
+  });
+
+  window.electronAPI.onMessage('streamStopped', (data) => {
+    console.log('[App] Stream stopped confirmation received');
+    
+    // Reset streaming state
+    setStreamingState(false);
+    currentStreamAbortController = null;
+    
+    removeInlineLoadingBubble();
+    if (window.hideLoadingIndicator) {
+        window.hideLoadingIndicator();
+    }
+    
+    // Finalize any partial response
+    if (typingBubble && typingBubble.rawText) {
+      if (typingBubble.bubble) {
+        typingBubble.bubble.innerHTML = marked.parse(typingBubble.rawText + '\n\n*[Response stopped by user]*');
+      }
+      typingBubble = null;
+      messageIndexCounter++;
     }
   });
 
@@ -1203,4 +1277,65 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
   });
 
   console.log("[App] Frontend initialized.");
+
+  // --- Streaming Control Functions ---
+  function setStreamingState(streaming) {
+    isStreaming = streaming;
+    updateSendButtonState();
+    
+    // Disable/enable input fields during streaming
+    userInput.disabled = streaming;
+    if (expandedUserInput) {
+      expandedUserInput.disabled = streaming;
+    }
+    
+    // Disable expand button during streaming
+    if (expandInputBtn) {
+      expandInputBtn.disabled = streaming;
+    }
+  }
+
+  function updateSendButtonState() {
+    const buttons = [sendBtn, expandedSendBtn].filter(btn => btn);
+    
+    buttons.forEach(button => {
+      if (isStreaming) {
+        // Change to stop button
+        button.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z" />
+          </svg>
+        `;
+        button.title = "Stop Generation";
+        button.classList.add('btn-stop');
+        button.classList.remove('btn-primary');
+      } else {
+        // Change back to send button
+        button.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+          </svg>
+        `;
+        button.title = isEditing ? "Save Edit" : "Send Message";
+        button.classList.remove('btn-stop');
+        button.classList.add('btn-primary');
+      }
+    });
+  }
+
+  function stopCurrentStream() {
+    if (currentStreamAbortController) {
+      console.log('[App] Stopping current stream...');
+      currentStreamAbortController.abort();
+      // Don't set to null yet - let the streamStopped event handler clean up
+    }
+    
+    // Send stop message to main process
+    window.electronAPI.sendMessage('stop-stream');
+    
+    // Don't reset streaming state here - let streamStopped event handler do it
+    // Don't finalize partial response here - let streamStopped event handler do it
+    
+    console.log('[App] Stop request sent to main process');
+  }
 });

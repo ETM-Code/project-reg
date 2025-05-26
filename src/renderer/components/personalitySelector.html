@@ -1,6 +1,22 @@
 <!-- Placeholder for Personality Selector HTML -->
 <div id="personality-selector-overlay" class="personality-selector-overlay hidden">
   <div class="personality-selector-background"></div>
+  
+  <!-- Settings Dropdown (moved outside container to avoid overflow clipping) -->
+  <div id="personality-settings-dropdown" class="personality-settings-dropdown hidden">
+    <div class="settings-section">
+      <h3>Available Personalities</h3>
+      <div id="personality-availability-list" class="personality-availability-list">
+        <!-- Personality toggles will be populated here -->
+      </div>
+    </div>
+    <div class="settings-section">
+      <button id="create-new-personality-btn" class="btn-primary">
+        <i class="fas fa-plus mr-2"></i>Create New Personality
+      </button>
+    </div>
+  </div>
+  
   <div class="personality-selector-container">
     <!-- Header with title and settings button -->
     <div class="personality-selector-header">
@@ -8,21 +24,6 @@
       <button id="personality-settings-btn" class="personality-settings-btn" title="Personality Settings">
         <i class="fas fa-cog"></i>
       </button>
-    </div>
-    
-    <!-- Settings Dropdown (initially hidden) -->
-    <div id="personality-settings-dropdown" class="personality-settings-dropdown hidden">
-      <div class="settings-section">
-        <h3>Available Personalities</h3>
-        <div id="personality-availability-list" class="personality-availability-list">
-          <!-- Personality toggles will be populated here -->
-        </div>
-      </div>
-      <div class="settings-section">
-        <button id="create-new-personality-btn" class="btn-primary">
-          <i class="fas fa-plus mr-2"></i>Create New Personality
-        </button>
-      </div>
     </div>
     
     <!-- Carousel will go here -->

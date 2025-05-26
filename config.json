@@ -226,7 +226,8 @@
       ],
       "modelId": "gpt-4o",
       "allowCustomInstructions": true,
-      "customInstructions": ""
+      "customInstructions": "",
+      "disabled": false
     },
     {
       "id": "mitchell-reviewer",
@@ -245,7 +246,8 @@
       "tools": [],
       "modelId": "o4-mini",
       "allowCustomInstructions": true,
-      "customInstructions": ""
+      "customInstructions": "",
+      "disabled": false
     },
     {
       "id": "carlos-brainstormer",
@@ -265,7 +267,8 @@
       ],
       "modelId": "gpt-4o",
       "allowCustomInstructions": true,
-      "customInstructions": ""
+      "customInstructions": "",
+      "disabled": false
     },
     {
       "id": "context-creator",
@@ -325,7 +328,8 @@
       ],
       "modelId": "gemini-2.5-flash-latest",
       "allowCustomInstructions": true,
-      "customInstructions": ""
+      "customInstructions": "",
+      "disabled": true
     },
     {
       "id": "reasoning-assistant",
@@ -342,7 +346,8 @@
       "tools": [],
       "modelId": "o4-mini",
       "allowCustomInstructions": true,
-      "customInstructions": ""
+      "customInstructions": "",
+      "disabled": true
     },
     {
       "id": "vanilla-assistant",

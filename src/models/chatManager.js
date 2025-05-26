@@ -170,10 +170,13 @@ async function setCurrentChatPersonality(personalityId) {
  * @returns {Promise<import('./AIModelInterface').SendMessageResult>} Result object from the model instance.
  * @throws {Error} If no model is active or sending fails.
  */
-async function sendMessageToModel() {
+async function sendMessageToModel(options = {}) {
    if (!activeModelInstance || !currentPersonalityConfig) {
      throw new Error("[ChatManager] No active model instance or personality configured. Cannot send message.");
    }
+
+   // Extract abort signal from options
+   const { abortSignal, ...otherOptions } = options;
 
    // Retrieve tool schemas based on the personality configuration
    const toolNamesFromPersonality = currentPersonalityConfig.tools || []; // These are names like "createNotification"
@@ -200,16 +203,16 @@ async function sendMessageToModel() {
        }
    }
 
-
-   const options = {
+   const modelOptions = {
        tools: toolSchemas.length > 0 ? toolSchemas : undefined, // Pass schemas, or undefined if none
-       // No overrides by default, model implementation will load defaults
+       abortSignal: abortSignal, // Pass abort signal to model
+       ...otherOptions // Spread any other options
    };
 
    // Add reasoning context if applicable
    if (activeModelInstance instanceof OpenAIReasoningChat && currentReasoningContext) {
        console.log("[ChatManager] Adding reasoning context to request.");
-       options.reasoning = currentReasoningContext;
+       modelOptions.reasoning = currentReasoningContext;
        currentReasoningContext = null; // Consume context after adding it
    }
 
@@ -217,7 +220,7 @@ async function sendMessageToModel() {
 
    try {
        // Pass current history. The model instance handles transformation and API call.
-       const result = await activeModelInstance.sendMessageStream(conversationHistory, null, options);
+       const result = await activeModelInstance.sendMessageStream(conversationHistory, null, modelOptions);
 
        // Store reasoning context from response if applicable
        if (activeModelInstance instanceof OpenAIReasoningChat && result.rawResponse?.reasoning) {
@@ -451,7 +454,7 @@ async function startNewChat() {
   }
 }
 
-async function editMessage(messageId, newContent) {
+async function editMessage(messageId, newContent, options = {}) {
   const messageIndex = conversationHistory.findIndex(msg => msg.id === messageId);
   console.log(`[chatManager.editMessage] Received ID: ${messageId}. Found index: ${messageIndex}. History length: ${conversationHistory.length}`); // Keep log
 
@@ -494,8 +497,8 @@ async function editMessage(messageId, newContent) {
     // 5. Trigger model response using the active instance and truncated history
     console.log(`[ChatManager.editMessage] Edit successful for ${messageId}. Triggering model response.`);
     try {
-        // Call the refactored method, which uses the active instance
-        const result = await sendMessageToModel();
+        // Call the refactored method, which uses the active instance, and pass options (including abort signal)
+        const result = await sendMessageToModel(options);
         // Return the result object (contains stream/response promise)
         return result;
     } catch (error) {

@@ -41,7 +41,8 @@
     max-width: 800px;
     text-align: center;
     position: relative; /* Needed for particle canvas positioning */
-    overflow: hidden; /* Contain particles if needed */
+    overflow: hidden; /* Revert to hidden to contain personalities */
+    z-index: 1000; /* Explicit z-index */
 }
 
 /* Header with settings button */
@@ -51,6 +52,7 @@
     align-items: center;
     margin-bottom: 20px;
     position: relative;
+    z-index: 1200; /* Higher than container to ensure dropdown shows above content */
 }
 
 .personality-selector-header h2 {
@@ -77,9 +79,7 @@
 
 /* Settings Dropdown */
 .personality-settings-dropdown {
-    position: absolute;
-    top: 100%;
-    right: 0;
+    position: fixed;
     background: rgba(30, 30, 40, 0.95);
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 8px;
@@ -87,14 +87,22 @@
     min-width: 300px;
     max-height: 400px;
     overflow-y: auto;
-    z-index: 10;
+    z-index: 1800; /* Higher than header to ensure it shows above everything */
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease;
+    /* Position will be set by JavaScript */
 }
 
 .personality-settings-dropdown.hidden {
-    display: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    pointer-events: none;
 }
 
 .settings-section {

@@ -172,6 +172,13 @@ class GeminiChat extends AIModelInterface {
         console.log(`[GeminiChat] Providing tools:`, JSON.stringify(geminiTools.map(t => t.name || t.functionDeclarations?.[0]?.name), null, 2)); // Log tool names
     }
 
+    // Check if request was aborted before making API call
+    if (options.abortSignal?.aborted) {
+      const error = new Error('Request aborted');
+      error.name = 'AbortError';
+      throw error;
+    }
+
     try {
       const modelInstance = this.genAI.getGenerativeModel({
         model: this.modelName,
@@ -186,6 +193,13 @@ class GeminiChat extends AIModelInterface {
         // generationConfig: { temperature: 0.7 } // Add if needed
       });
 
+      // Check abort signal again before sending message
+      if (options.abortSignal?.aborted) {
+        const error = new Error('Request aborted');
+        error.name = 'AbortError';
+        throw error;
+      }
+
       const result = await chat.sendMessageStream(message || ""); // Send message
 
       console.log("[GeminiChat] Stream obtained successfully.");
@@ -193,6 +207,13 @@ class GeminiChat extends AIModelInterface {
       return { stream: result.stream, response: result.response };
 
     } catch (error) {
+      // Check if this is an abort error and preserve it
+      if (error.name === 'AbortError' || options.abortSignal?.aborted) {
+        const abortError = new Error('Request aborted');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }
+      
       console.error(`[GeminiChat] Error sending message or starting chat (${this.modelName}):`, error);
       // Log more details if helpful
       console.error(`[GeminiChat] History used:`, JSON.stringify(geminiHistory.slice(-2))); // Log last few history items

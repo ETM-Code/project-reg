@@ -10,6 +10,9 @@ const { dialog } = require('electron'); // For file dialogs
 const fs = require('fs');
 const path = require('path');
 
+// Import shared stream state
+const { streamState } = require('./streamState');
+
 // Use path manager for file paths
 const TIMERS_FILE_PATH = pathManager.getTimersPath();
 const ALARMS_FILE_PATH = pathManager.getAlarmsPath();
@@ -92,9 +95,19 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
             return; // Stop processing
         }
 
+        // Create abort controller for this edit request
+        streamState.currentAbortController = new AbortController();
+        const abortSignal = streamState.currentAbortController.signal;
+
         try {
+            // Check if request was aborted before starting
+            if (abortSignal.aborted) {
+                console.log('[IPC Edit] Edit request aborted before starting');
+                return;
+            }
+
             // Call the refactored chatManager function which returns a result object or an error object
-            const modelResult = await chatManager.editMessage(messageId, newContent); // Pass messageId (chatId is implicitly the one checked above)
+            const modelResult = await chatManager.editMessage(messageId, newContent, { abortSignal }); // Pass abort signal in options
 
             // Check if the edit itself failed (e.g., messageId not found) or if model response failed
             if (modelResult && modelResult.error) {
@@ -123,52 +136,72 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
             const modelType = activeModel.getImplementationType();
             const modelName = activeModel.getModelName();
 
-            // Process the stream
-            for await (const chunk of modelResult.stream) {
-                // Use same stream processing logic as in main.js's chatMessage handler
-                if (modelType === 'gpt') {
-                    if (chunk.choices && chunk.choices[0].delta) {
-                        const delta = chunk.choices[0].delta;
-                        if (delta.content) {
-                            responseBuffer += delta.content;
-                            if (mainWindow) mainWindow.webContents.send('streamPartialResponse', { text: delta.content });
-                        }
-                        if (delta.tool_calls) {
-                            rawToolDataForHistory = rawToolDataForHistory || [];
-                            for (const toolCallDelta of delta.tool_calls) {
-                                if (toolCallDelta.index != null) {
-                                    const index = toolCallDelta.index;
-                                    if (!rawToolDataForHistory[index]) {
-                                        rawToolDataForHistory[index] = { id: null, type: 'function', function: { name: '', arguments: '' } };
+            // Process the stream with abort signal checking
+            try {
+                for await (const chunk of modelResult.stream) {
+                    // Check if request was aborted during streaming
+                    if (abortSignal.aborted) {
+                        console.log('[IPC Edit] Edit stream aborted during processing');
+                        break;
+                    }
+
+                    // Use same stream processing logic as in main.js's chatMessage handler
+                    if (modelType === 'gpt') {
+                        if (chunk.choices && chunk.choices[0].delta) {
+                            const delta = chunk.choices[0].delta;
+                            if (delta.content) {
+                                responseBuffer += delta.content;
+                                if (mainWindow) mainWindow.webContents.send('streamPartialResponse', { text: delta.content });
+                            }
+                            if (delta.tool_calls) {
+                                rawToolDataForHistory = rawToolDataForHistory || [];
+                                for (const toolCallDelta of delta.tool_calls) {
+                                    if (toolCallDelta.index != null) {
+                                        const index = toolCallDelta.index;
+                                        if (!rawToolDataForHistory[index]) {
+                                            rawToolDataForHistory[index] = { id: null, type: 'function', function: { name: '', arguments: '' } };
+                                        }
+                                        if (toolCallDelta.id) rawToolDataForHistory[index].id = toolCallDelta.id;
+                                        if (toolCallDelta.function?.name) rawToolDataForHistory[index].function.name += toolCallDelta.function.name;
+                                        if (toolCallDelta.function?.arguments) rawToolDataForHistory[index].function.arguments += toolCallDelta.function.arguments;
                                     }
-                                    if (toolCallDelta.id) rawToolDataForHistory[index].id = toolCallDelta.id;
-                                    if (toolCallDelta.function?.name) rawToolDataForHistory[index].function.name += toolCallDelta.function.name;
-                                    if (toolCallDelta.function?.arguments) rawToolDataForHistory[index].function.arguments += toolCallDelta.function.arguments;
                                 }
                             }
                         }
-                    }
-                } else if (modelType === 'gemini') {
-                    if (chunk.functionCall) {
-                        detectedToolCalls.push({ id: `gemini_call_${Date.now()}_${detectedToolCalls.length}`, name: chunk.functionCall.name, arguments: chunk.functionCall.args });
-                        continue;
-                    }
-                    if (chunk.candidates && chunk.candidates[0].content && chunk.candidates[0].content.parts) {
-                        for (const part of chunk.candidates[0].content.parts) {
-                            if (part.text) {
-                                responseBuffer += part.text;
-                                if (mainWindow) mainWindow.webContents.send('streamPartialResponse', { text: part.text });
-                            }
-                            if (part.functionCall) {
-                                detectedToolCalls.push({ id: `gemini_call_${Date.now()}_${detectedToolCalls.length}`, name: part.functionCall.name, arguments: part.functionCall.args });
-                            }
+                    } else if (modelType === 'gemini') {
+                        if (chunk.functionCall) {
+                            detectedToolCalls.push({ id: `gemini_call_${Date.now()}_${detectedToolCalls.length}`, name: chunk.functionCall.name, arguments: chunk.functionCall.args });
+                            continue;
                         }
-                    } else if (chunk.text) {
-                        responseBuffer += chunk.text;
-                        if (mainWindow) mainWindow.webContents.send('streamPartialResponse', { text: chunk.text });
+                        if (chunk.candidates && chunk.candidates[0].content && chunk.candidates[0].content.parts) {
+                            for (const part of chunk.candidates[0].content.parts) {
+                                if (part.text) {
+                                    responseBuffer += part.text;
+                                    if (mainWindow) mainWindow.webContents.send('streamPartialResponse', { text: part.text });
+                                }
+                                if (part.functionCall) {
+                                    detectedToolCalls.push({ id: `gemini_call_${Date.now()}_${detectedToolCalls.length}`, name: part.functionCall.name, arguments: part.functionCall.args });
+                                }
+                            }
+                        } else if (chunk.text) {
+                            responseBuffer += chunk.text;
+                            if (mainWindow) mainWindow.webContents.send('streamPartialResponse', { text: chunk.text });
+                        }
                     }
+                } // End stream processing
+            } catch (error) {
+                if (error.name === 'AbortError' || abortSignal.aborted) {
+                    console.log('[IPC Edit] Edit stream processing aborted');
+                    return; // Exit gracefully on abort
                 }
-            } // End stream processing
+                throw error; // Re-throw other errors
+            }
+
+            // Check if aborted after stream processing
+            if (abortSignal.aborted) {
+                console.log('[IPC Edit] Edit request aborted after stream processing');
+                return;
+            }
 
             // Finalize GPT tool calls
             if (modelType === 'gpt' && rawToolDataForHistory) {
@@ -236,17 +269,50 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
 
 
         } catch (error) {
+            // Check if error is due to abort
+            if (error.name === 'AbortError' || streamState.currentAbortController?.signal.aborted) {
+                console.log("[IPC Edit] Edit message processing aborted by user");
+                // Send abort confirmation to renderer
+                if (mainWindow) mainWindow.webContents.send('streamStopped', { message: 'Edit stream stopped by user' });
+                return; // Exit gracefully
+            }
+            
             console.error("[IPC Edit] Error processing edit message stream:", error);
             if (mainWindow) {
                  mainWindow.webContents.send('streamError', { message: "Error processing edit: " + error.message });
                  mainWindow.webContents.send('streamFinalResponse', { text: "" }); // Ensure stream ends
             }
+        } finally {
+            // Clean up abort controller
+            streamState.currentAbortController = null;
         }
     });
 
     // Handler to get the currently active chat ID from the manager
     ipcMain.handle('get-current-chat-id', () => {
         return chatManager.getCurrentChatId();
+    });
+
+    // Handler to stop current stream
+    ipcMain.on('stop-stream', (event) => {
+        console.log('[IPC] Received stop-stream request');
+        
+        if (streamState.currentAbortController) {
+            console.log('[IPC] Aborting current stream...');
+            streamState.currentAbortController.abort();
+            streamState.currentAbortController = null;
+            
+            // Notify renderer that stream was stopped
+            if (mainWindow) {
+                mainWindow.webContents.send('streamStopped', { message: 'Stream stopped by user' });
+            }
+        } else {
+            console.log('[IPC] No active stream to stop');
+            // Still notify renderer in case UI needs to reset
+            if (mainWindow) {
+                mainWindow.webContents.send('streamStopped', { message: 'No active stream' });
+            }
+        }
     });
 
     // Handler to get available personalities and the current default

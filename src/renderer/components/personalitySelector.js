@@ -418,10 +418,21 @@ function handlePersonalitySelect(personalityId) {
 }
 
 function toggleSettingsDropdown() {
-    if (!settingsDropdown) return;
+    if (!settingsDropdown || !settingsBtn) return;
     
     const isHidden = settingsDropdown.classList.contains('hidden');
     if (isHidden) {
+        // Calculate position based on settings button
+        const btnRect = settingsBtn.getBoundingClientRect();
+        const dropdownWidth = 300; // min-width from CSS
+        
+        // Position below the button, aligned to the right edge
+        const left = Math.max(10, btnRect.right - dropdownWidth); // Ensure it doesn't go off-screen
+        const top = btnRect.bottom + 5; // 5px gap below button
+        
+        settingsDropdown.style.left = `${left}px`;
+        settingsDropdown.style.top = `${top}px`;
+        
         settingsDropdown.classList.remove('hidden');
         populateSettingsDropdown(); // Refresh on open
     } else {
@@ -748,7 +759,9 @@ function init(callback) {
     
     // Close settings dropdown when clicking outside
     document.addEventListener('click', (e) => {
-        if (settingsDropdown && !settingsDropdown.contains(e.target) && !settingsBtn.contains(e.target)) {
+        if (settingsDropdown && !settingsDropdown.contains(e.target) && 
+            !settingsBtn.contains(e.target) && 
+            !settingsDropdown.classList.contains('hidden')) {
             settingsDropdown.classList.add('hidden');
         }
     });

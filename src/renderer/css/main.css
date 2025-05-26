@@ -57,6 +57,14 @@ body {
     /* Example focus ring using accent color */
      @apply focus:ring-[var(--accent-color)];
   }
+  .btn-stop {
+    @apply btn text-white shadow-sm hover:shadow-md;
+    background: linear-gradient(135deg, #ef4444, #dc2626); /* Red gradient for stop button */
+    @apply focus:ring-red-500;
+  }
+  .btn-stop:hover {
+    background: linear-gradient(135deg, #dc2626, #b91c1c); /* Darker red on hover */
+  }
   .btn-secondary { /* Example for potential future use */
     @apply btn bg-[var(--secondary-color)] text-[var(--sidebar-text-color)] border border-[var(--border-color-soft)] hover:bg-gray-300 focus:ring-[var(--primary-color)];
   }

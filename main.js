@@ -14,6 +14,9 @@ const dailyTokenTracker = require('./src/services/dailyTokenTracker'); // Import
 const chatStorage = require('./src/services/chatStorage'); // Import chatStorage
 const settingsManager = require('./src/config/settingsManager'); // Import SettingsManager
 
+// Import shared stream state
+const { streamState } = require('./src/main/streamState');
+
 // Declare mainWindow at the module level
 let mainWindow;
 
@@ -119,6 +122,10 @@ ipcMain.on('chatMessage', async (event, data) => {
   const { message } = data; // Removed 'model' - personality is managed internally
   // REMOVED: Logic to switch model based on 'model' parameter
 
+  // Create abort controller for this request
+  streamState.currentAbortController = new AbortController();
+  const abortSignal = streamState.currentAbortController.signal;
+
   // --- Add User Message to History ---
   chatManager.appendUserMessage(message); // Add user message first
 
@@ -130,6 +137,12 @@ ipcMain.on('chatMessage', async (event, data) => {
 
     // --- Recursive function to handle model calls and tool execution ---
     async function handleModelInteraction() {
+      // Check if request was aborted before starting
+      if (abortSignal.aborted) {
+        console.log('[Main] Request aborted before model interaction');
+        return;
+      }
+
       const activeModel = chatManager.getActiveModelInstance();
       if (!activeModel) {
           throw new Error("No active model instance available.");
@@ -140,76 +153,96 @@ ipcMain.on('chatMessage', async (event, data) => {
       // Get history *before* this call for token counting
       const historyBeforeCall = chatManager.getConversationHistory();
 
-      // Call the active model instance
-      const modelResult = await chatManager.sendMessageToModel();
+      // Call the active model instance with abort signal
+      const modelResult = await chatManager.sendMessageToModel({ abortSignal });
 
       let responseBuffer = "";
       let detectedToolCalls = []; // Standardized: { id, name, arguments }
       let rawToolDataForHistory = null; // Store raw data for appendModelResponse if needed
       let responsePromise = modelResult.response; // For Gemini token counting
 
-      // Process the stream
-      for await (const chunk of modelResult.stream) {
-        if (modelType === 'gpt') {
-          if (chunk.choices && chunk.choices[0].delta) {
-            const delta = chunk.choices[0].delta;
-            if (delta.content) {
-              responseBuffer += delta.content;
-              event.sender.send('streamPartialResponse', { text: delta.content });
-            }
-            // Accumulate GPT tool calls
-            if (delta.tool_calls) {
-              rawToolDataForHistory = rawToolDataForHistory || []; // Initialize if first tool chunk
-              for (const toolCallDelta of delta.tool_calls) {
-                if (toolCallDelta.index != null) {
-                  const index = toolCallDelta.index;
-                  if (!rawToolDataForHistory[index]) {
-                    rawToolDataForHistory[index] = { id: null, type: 'function', function: { name: '', arguments: '' } };
+      // Process the stream with abort signal checking
+      try {
+        for await (const chunk of modelResult.stream) {
+          // Check if request was aborted during streaming
+          if (abortSignal.aborted) {
+            console.log('[Main] Stream aborted during processing');
+            break;
+          }
+
+          if (modelType === 'gpt') {
+            if (chunk.choices && chunk.choices[0].delta) {
+              const delta = chunk.choices[0].delta;
+              if (delta.content) {
+                responseBuffer += delta.content;
+                event.sender.send('streamPartialResponse', { text: delta.content });
+              }
+              // Accumulate GPT tool calls
+              if (delta.tool_calls) {
+                rawToolDataForHistory = rawToolDataForHistory || []; // Initialize if first tool chunk
+                for (const toolCallDelta of delta.tool_calls) {
+                  if (toolCallDelta.index != null) {
+                    const index = toolCallDelta.index;
+                    if (!rawToolDataForHistory[index]) {
+                      rawToolDataForHistory[index] = { id: null, type: 'function', function: { name: '', arguments: '' } };
+                    }
+                    if (toolCallDelta.id) rawToolDataForHistory[index].id = toolCallDelta.id;
+                    if (toolCallDelta.function?.name) rawToolDataForHistory[index].function.name += toolCallDelta.function.name;
+                    if (toolCallDelta.function?.arguments) rawToolDataForHistory[index].function.arguments += toolCallDelta.function.arguments;
                   }
-                  if (toolCallDelta.id) rawToolDataForHistory[index].id = toolCallDelta.id;
-                  if (toolCallDelta.function?.name) rawToolDataForHistory[index].function.name += toolCallDelta.function.name;
-                  if (toolCallDelta.function?.arguments) rawToolDataForHistory[index].function.arguments += toolCallDelta.function.arguments;
                 }
               }
             }
-          }
-          // Handle potential usage data in GPT stream (less common for streaming)
-          if (chunk.usage) console.log("GPT Usage Data (Stream Chunk):", chunk.usage);
+            // Handle potential usage data in GPT stream (less common for streaming)
+            if (chunk.usage) console.log("GPT Usage Data (Stream Chunk):", chunk.usage);
 
-        } else if (modelType === 'gemini') {
-          // Check for function calls first (simpler structure)
-          if (chunk.functionCall) {
-            console.log("Gemini function call detected (direct):", chunk.functionCall);
-            // Standardize format
-            detectedToolCalls.push({
-                id: `gemini_call_${Date.now()}_${detectedToolCalls.length}`, // Generate an ID
-                name: chunk.functionCall.name,
-                arguments: chunk.functionCall.args // Gemini provides args as object
-            });
-            continue; // Skip text processing
-          }
-          // Check within candidates/parts (more complex structure)
-          if (chunk.candidates && chunk.candidates[0].content && chunk.candidates[0].content.parts) {
-            for (const part of chunk.candidates[0].content.parts) {
-              if (part.text) {
-                responseBuffer += part.text;
-                event.sender.send('streamPartialResponse', { text: part.text });
-              }
-              if (part.functionCall) {
-                console.log("Gemini function call detected (in parts):", part.functionCall);
-                detectedToolCalls.push({
-                    id: `gemini_call_${Date.now()}_${detectedToolCalls.length}`,
-                    name: part.functionCall.name,
-                    arguments: part.functionCall.args
-                });
-              }
+          } else if (modelType === 'gemini') {
+            // Check for function calls first (simpler structure)
+            if (chunk.functionCall) {
+              console.log("Gemini function call detected (direct):", chunk.functionCall);
+              // Standardize format
+              detectedToolCalls.push({
+                  id: `gemini_call_${Date.now()}_${detectedToolCalls.length}`, // Generate an ID
+                  name: chunk.functionCall.name,
+                  arguments: chunk.functionCall.args // Gemini provides args as object
+              });
+              continue; // Skip text processing
             }
-          } else if (chunk.text) { // Handle simpler text chunks
-            responseBuffer += chunk.text;
-            event.sender.send('streamPartialResponse', { text: chunk.text });
+            // Check within candidates/parts (more complex structure)
+            if (chunk.candidates && chunk.candidates[0].content && chunk.candidates[0].content.parts) {
+              for (const part of chunk.candidates[0].content.parts) {
+                if (part.text) {
+                  responseBuffer += part.text;
+                  event.sender.send('streamPartialResponse', { text: part.text });
+                }
+                if (part.functionCall) {
+                  console.log("Gemini function call detected (in parts):", part.functionCall);
+                  detectedToolCalls.push({
+                      id: `gemini_call_${Date.now()}_${detectedToolCalls.length}`,
+                      name: part.functionCall.name,
+                      arguments: part.functionCall.args
+                  });
+                }
+              }
+            } else if (chunk.text) { // Handle simpler text chunks
+              responseBuffer += chunk.text;
+              event.sender.send('streamPartialResponse', { text: chunk.text });
+            }
           }
+        } // End stream processing loop
+      } catch (error) {
+        if (error.name === 'AbortError' || abortSignal.aborted) {
+          console.log('[Main] Stream processing aborted');
+          return; // Exit gracefully on abort
         }
-      } // End stream processing loop
+        throw error; // Re-throw other errors
+      }
+
+      // Check if aborted after stream processing
+      if (abortSignal.aborted) {
+        console.log('[Main] Request aborted after stream processing');
+        return;
+      }
 
       // Finalize detected tool calls for GPT
       if (modelType === 'gpt' && rawToolDataForHistory) {
@@ -390,11 +423,22 @@ ipcMain.on('chatMessage', async (event, data) => {
     }
 
   } catch (error) {
+    // Check if error is due to abort
+    if (error.name === 'AbortError' || streamState.currentAbortController?.signal.aborted) {
+      console.log("[main] Chat message processing aborted by user");
+      // Send abort confirmation to renderer
+      event.sender.send('streamStopped', { message: 'Stream stopped by user' });
+      return; // Exit gracefully
+    }
+    
     console.error("[main] Error during chat message processing:", error);
     // Send error back to renderer
     event.sender.send('streamError', { message: error.message || "An unknown error occurred." });
     // Ensure stream is considered "finished" even on error
     event.sender.send('streamFinalResponse', { text: "" }); // Send empty final response on error
+  } finally {
+    // Clean up abort controller
+    streamState.currentAbortController = null;
   }
 });
 

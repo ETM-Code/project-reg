@@ -146,6 +146,8 @@ class GPTChat extends AIModelInterface {
         top_p: 0.95,
         frequency_penalty: 0.2,
         presence_penalty: 0.4
+      }, {
+        signal: options.abortSignal // Pass abort signal to OpenAI client
       });
       // GPT stream is directly usable
       return { stream };

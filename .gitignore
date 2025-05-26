@@ -69,3 +69,14 @@ Thumbs.db
 
 # Internal Docs
 .md
+
+# Data
+data/chats
+data/token_usage
+data/notes.txt
+data/alarms.json
+data/archivedNotes.json
+data/events.json
+data/finishedEvents.json
+data/monthlyCredits.json
+data/timers.json
