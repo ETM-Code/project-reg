@@ -23,7 +23,8 @@ class PathManager {
                 this.getDataDir(),
                 this.getContextDir(),
                 this.getChatDir(),
-                this.getTokenUsageDir()
+                this.getTokenUsageDir(),
+                this.getMediaDir()
             ];
 
             requiredDirs.forEach(dir => {
@@ -120,6 +121,19 @@ class PathManager {
      */
     getAlarmsPath() {
         return path.join(this.getDataDir(), 'alarms.json');
+    }
+
+    /**
+     * Get the media directory (for icons and other media files)
+     * In development: ./src/renderer/media
+     * In production: userData/media
+     */
+    getMediaDir() {
+        if (this.isDev) {
+            return path.join(process.cwd(), 'src', 'renderer', 'media');
+        } else {
+            return path.join(this.userDataPath, 'media');
+        }
     }
 
     /**

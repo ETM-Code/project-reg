@@ -209,12 +209,34 @@ function populateCarousel() {
         // Create and add the icon image if available
         if (p.icon) {
             const iconImg = document.createElement('img');
-            // Adjust path: Remove 'src/renderer/' prefix assuming index.html is in src/renderer/
-            const relativePath = p.icon.startsWith('src/renderer/') ? p.icon.substring('src/renderer/'.length) : p.icon;
-            iconImg.src = relativePath;
-            iconImg.alt = `${p.name} icon`; // Add alt text for accessibility
-            iconImg.classList.add('personality-icon'); // Add class for styling
-            headerDiv.appendChild(iconImg); // Append icon to header
+            // Handle different icon path formats:
+            // - New format: 'media/icons/filename.png' (from icon browser)
+            // - Old format: 'src/renderer/media/filename.png' (legacy)
+            // - Relative format: 'media/filename.png' (manual input)
+            let iconSrc = p.icon;
+            
+            // If it's an old format path starting with 'src/renderer/', convert it
+            if (iconSrc.startsWith('src/renderer/')) {
+                iconSrc = iconSrc.substring('src/renderer/'.length);
+            }
+            
+            // Ensure the path starts with './' for proper relative resolution
+            if (!iconSrc.startsWith('./') && !iconSrc.startsWith('http') && !iconSrc.startsWith('/')) {
+                iconSrc = './' + iconSrc;
+            }
+            
+            iconImg.src = iconSrc;
+            iconImg.alt = `${p.name} icon`;
+            iconImg.classList.add('personality-icon');
+            
+            // Add error handling for broken images
+            iconImg.onerror = () => {
+                console.warn(`[PersonalitySelector] Failed to load icon: ${iconSrc} for personality: ${p.name}`);
+                // Hide the image element if it fails to load
+                iconImg.style.display = 'none';
+            };
+            
+            headerDiv.appendChild(iconImg);
         }
 
         const nameDiv = document.createElement('div');
@@ -435,6 +457,44 @@ function populateTools() {
     });
 }
 
+function showIconPreview(iconPath) {
+    if (!iconInput) return;
+    
+    // Remove existing preview
+    const existingPreview = document.getElementById('icon-preview');
+    if (existingPreview) {
+        existingPreview.remove();
+    }
+    
+    // Create preview container
+    const previewContainer = document.createElement('div');
+    previewContainer.id = 'icon-preview';
+    previewContainer.className = 'icon-preview mt-2';
+    
+    // Create preview image
+    const previewImg = document.createElement('img');
+    previewImg.src = iconPath;
+    previewImg.alt = 'Icon preview';
+    previewImg.className = 'w-12 h-12 rounded border border-gray-300 object-cover';
+    previewImg.onerror = () => {
+        previewContainer.innerHTML = '<span class="text-red-500 text-sm">Failed to load preview</span>';
+    };
+    
+    // Create preview label
+    const previewLabel = document.createElement('span');
+    previewLabel.className = 'ml-2 text-sm text-gray-600';
+    previewLabel.textContent = 'Preview';
+    
+    previewContainer.appendChild(previewImg);
+    previewContainer.appendChild(previewLabel);
+    
+    // Insert preview after the icon input group
+    const iconInputGroup = iconInput.closest('.form-group');
+    if (iconInputGroup) {
+        iconInputGroup.appendChild(previewContainer);
+    }
+}
+
 function handlePersonalitySelect(personalityId) {
     console.log(`Personality selected: ${personalityId}`);
     if (onSelectCallback) {
@@ -547,6 +607,11 @@ function fillEditorForm(personality) {
     modelSelect.value = personality.modelId || '';
     customInstructionsInput.value = personality.customInstructions || '';
     
+    // Show icon preview if personality has an icon
+    if (personality.icon) {
+        showIconPreview(personality.icon);
+    }
+    
     // Load prompt content (this would need an IPC call to read the prompt file)
     loadPromptContent(personality.promptId);
     
@@ -580,6 +645,12 @@ function clearEditorForm() {
     // Clear all checkboxes
     const checkboxes = editorForm.querySelectorAll('input[type="checkbox"]');
     checkboxes.forEach(cb => cb.checked = false);
+    
+    // Remove icon preview
+    const existingPreview = document.getElementById('icon-preview');
+    if (existingPreview) {
+        existingPreview.remove();
+    }
 }
 
 async function loadPromptContent(promptId) {
@@ -808,9 +879,57 @@ async function init(callback) {
     }
     
     if (browseIconBtn) {
-        browseIconBtn.addEventListener('click', () => {
-            // TODO: Implement file browser for icon selection
-            alert('File browser for icons will be implemented later.');
+        browseIconBtn.addEventListener('click', async () => {
+            try {
+                console.log('[PersonalitySelector] Opening icon browser...');
+                
+                // Disable button during operation
+                browseIconBtn.disabled = true;
+                browseIconBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Browsing...';
+                
+                // Open file browser for icons
+                const result = await window.electronAPI.invoke('browse-icon-file');
+                
+                if (!result.success) {
+                    alert('Error opening file browser: ' + result.error);
+                    return;
+                }
+                
+                // If user selected an icon
+                if (result.iconPath) {
+                    iconInput.value = result.iconPath;
+                    console.log(`[PersonalitySelector] Icon selected: ${result.iconPath}`);
+                    
+                    // Show preview of the selected icon (optional)
+                    showIconPreview(result.iconPath);
+                } else {
+                    console.log('[PersonalitySelector] No icon selected');
+                }
+                
+            } catch (error) {
+                console.error('[PersonalitySelector] Error in icon browser:', error);
+                alert('Error selecting icon: ' + error.message);
+            } finally {
+                // Restore button state
+                browseIconBtn.disabled = false;
+                browseIconBtn.innerHTML = 'Browse';
+            }
+        });
+    }
+    
+    // Add event listener for manual icon path input
+    if (iconInput) {
+        iconInput.addEventListener('input', (e) => {
+            const iconPath = e.target.value.trim();
+            if (iconPath) {
+                showIconPreview(iconPath);
+            } else {
+                // Remove preview if input is empty
+                const existingPreview = document.getElementById('icon-preview');
+                if (existingPreview) {
+                    existingPreview.remove();
+                }
+            }
         });
     }
     

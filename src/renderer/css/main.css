@@ -313,3 +313,45 @@ body {
     flex-grow: 1;
     min-height: 0; /* Important for nested flex */
 }
+
+/* ======================================== */
+/* Personality Selector Icon Preview Styles */
+/* ======================================== */
+
+.icon-preview {
+    @apply flex items-center mt-2 p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700;
+}
+
+.icon-preview img {
+    @apply flex-shrink-0;
+}
+
+.icon-preview img:hover {
+    @apply opacity-80 transition-opacity;
+}
+
+.icon-selection {
+    @apply flex items-center space-x-2;
+}
+
+.icon-selection input {
+    @apply flex-grow;
+}
+
+.icon-selection button {
+    @apply flex-shrink-0;
+}
+
+/* Error state for failed icon loading */
+.icon-preview .text-red-500 {
+    @apply flex items-center;
+}
+
+/* Personality icon in the carousel */
+.personality-icon {
+    @apply w-16 h-16 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-700;
+}
+
+.personality-icon:hover {
+    @apply border-blue-300 dark:border-blue-500 transition-colors;
+}

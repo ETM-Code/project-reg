@@ -944,6 +944,61 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
         }
     });
 
+    ipcMain.handle('browse-icon-file', async () => {
+        try {
+            console.log('[IPC] Opening file browser for icon selection');
+            
+            const result = await dialog.showOpenDialog(mainWindow, {
+                title: 'Select Icon File',
+                properties: ['openFile'],
+                filters: [
+                    { name: 'Image Files', extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico'] },
+                    { name: 'PNG Files', extensions: ['png'] },
+                    { name: 'JPEG Files', extensions: ['jpg', 'jpeg'] },
+                    { name: 'SVG Files', extensions: ['svg'] },
+                    { name: 'All Files', extensions: ['*'] }
+                ]
+            });
+
+            if (result.canceled) {
+                return { success: true, iconPath: null };
+            }
+
+            const selectedFile = result.filePaths[0];
+            const fileName = path.basename(selectedFile);
+            const fileExtension = path.extname(fileName);
+            
+            // Create a unique filename to avoid conflicts
+            const timestamp = Date.now();
+            const uniqueFileName = `${path.basename(fileName, fileExtension)}_${timestamp}${fileExtension}`;
+            
+            // Determine the icons directory
+            const iconsDir = path.join(pathManager.getMediaDir(), 'icons');
+            if (!fs.existsSync(iconsDir)) {
+                fs.mkdirSync(iconsDir, { recursive: true });
+            }
+            
+            const destinationPath = path.join(iconsDir, uniqueFileName);
+            
+            // Copy the file to the icons directory
+            fs.copyFileSync(selectedFile, destinationPath);
+            
+            // Return the relative path from the renderer's perspective
+            const relativePath = `media/icons/${uniqueFileName}`;
+            
+            console.log(`[IPC] Icon copied to: ${destinationPath}, relative path: ${relativePath}`);
+            
+            return { 
+                success: true, 
+                iconPath: relativePath,
+                originalFileName: fileName
+            };
+        } catch (error) {
+            console.error('[IPC] Error browsing/copying icon file:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('convert-and-add-context-files', async (_, filePaths) => {
         try {
             console.log(`[IPC] Converting ${filePaths.length} files to context`);
