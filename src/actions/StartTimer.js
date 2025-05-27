@@ -2,16 +2,23 @@
 const ActionBase = require('./ActionBase');
 const fs = require('fs');
 const path = require('path');
+const pathManager = require('../util/pathManager');
 
-const TIMERS_FILE_PATH = path.join(__dirname, '..', '..', 'data', 'timers.json');
+const TIMERS_FILE_PATH = pathManager.getTimersPath();
 
 // Ensure the data directory and timers.json file exist
-const dataDir = path.dirname(TIMERS_FILE_PATH);
-if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-}
-if (!fs.existsSync(TIMERS_FILE_PATH)) {
-    fs.writeFileSync(TIMERS_FILE_PATH, JSON.stringify([]), 'utf8');
+function initializeTimerFile() {
+    try {
+        const dataDir = pathManager.getDataDir();
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+        }
+        if (!fs.existsSync(TIMERS_FILE_PATH)) {
+            fs.writeFileSync(TIMERS_FILE_PATH, JSON.stringify([]), 'utf8');
+        }
+    } catch (error) {
+        console.error('[StartTimer] Failed to initialize timer file:', error);
+    }
 }
 
 class StartTimer extends ActionBase {
@@ -43,6 +50,9 @@ class StartTimer extends ActionBase {
 
     // Context will be passed by ActionsManager to execute
     async execute(params, context) {
+        // Initialize file if needed
+        initializeTimerFile();
+        
         const { duration, label } = params;
         let currentChatId = null;
 

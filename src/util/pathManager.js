@@ -124,6 +124,41 @@ class PathManager {
     }
 
     /**
+     * Get events file path
+     */
+    getEventsPath() {
+        return path.join(this.getDataDir(), 'events.json');
+    }
+
+    /**
+     * Get finished events file path
+     */
+    getFinishedEventsPath() {
+        return path.join(this.getDataDir(), 'finishedEvents.json');
+    }
+
+    /**
+     * Get notes file path
+     */
+    getNotesPath() {
+        return path.join(this.getDataDir(), 'notes.txt');
+    }
+
+    /**
+     * Get archived notes file path
+     */
+    getArchivedNotesPath() {
+        return path.join(this.getDataDir(), 'archivedNotes.json');
+    }
+
+    /**
+     * Get monthly credits file path
+     */
+    getMonthlyCreditsPath() {
+        return path.join(this.getDataDir(), 'monthlyCredits.json');
+    }
+
+    /**
      * Get the media directory (for icons and other media files)
      * In development: ./src/renderer/media
      * In production: userData/media

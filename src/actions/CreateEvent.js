@@ -3,13 +3,30 @@ const ActionBase = require('./ActionBase');
 const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
+const pathManager = require('../util/pathManager');
 
-const EVENTS_FILE = path.join(__dirname, '../../data/events.json');
-const FINISHED_EVENTS_FILE = path.join(__dirname, '../../data/finishedEvents.json');
+const EVENTS_FILE = pathManager.getEventsPath();
+const FINISHED_EVENTS_FILE = pathManager.getFinishedEventsPath();
 
 // Initialize events files if missing
-if (!fs.existsSync(EVENTS_FILE)) fs.writeFileSync(EVENTS_FILE, JSON.stringify([], null, 2));
-if (!fs.existsSync(FINISHED_EVENTS_FILE)) fs.writeFileSync(FINISHED_EVENTS_FILE, JSON.stringify([], null, 2));
+function initializeEventFiles() {
+  try {
+    // Ensure data directory exists
+    const dataDir = pathManager.getDataDir();
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    if (!fs.existsSync(EVENTS_FILE)) {
+      fs.writeFileSync(EVENTS_FILE, JSON.stringify([], null, 2));
+    }
+    if (!fs.existsSync(FINISHED_EVENTS_FILE)) {
+      fs.writeFileSync(FINISHED_EVENTS_FILE, JSON.stringify([], null, 2));
+    }
+  } catch (error) {
+    console.error('[CreateEvent] Failed to initialize event files:', error);
+  }
+}
 
 class CreateEvent extends ActionBase {
   /**
@@ -17,6 +34,9 @@ class CreateEvent extends ActionBase {
    * @param {Object} params - { date, typeTag, importanceTag, reminder (optional) }
    */
   async execute(params) {
+    // Initialize files if needed
+    initializeEventFiles();
+    
     const { date, typeTag, importanceTag, reminder } = params;
     // Stub: Insert integration with Google Calendar API here using proper OAuth2 flows.
     const newEvent = { date, typeTag, importanceTag, reminder, createdAt: new Date().toISOString() };

@@ -2,19 +2,31 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('../../config');
+const pathManager = require('./pathManager');
 
-const CREDITS_FILE = path.join(__dirname, '../../data/monthlyCredits.json');
+const CREDITS_FILE = pathManager.getMonthlyCreditsPath();
 
 /**
  * Loads credit usage data or initializes it if not present.
  */
 function loadCredits() {
-  if (!fs.existsSync(CREDITS_FILE)) {
-    const initData = { used: 0, month: new Date().getMonth() };
-    fs.writeFileSync(CREDITS_FILE, JSON.stringify(initData, null, 2));
-    return initData;
+  try {
+    // Ensure data directory exists
+    const dataDir = pathManager.getDataDir();
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    if (!fs.existsSync(CREDITS_FILE)) {
+      const initData = { used: 0, month: new Date().getMonth() };
+      fs.writeFileSync(CREDITS_FILE, JSON.stringify(initData, null, 2));
+      return initData;
+    }
+    return JSON.parse(fs.readFileSync(CREDITS_FILE));
+  } catch (error) {
+    console.error('[Credits] Error loading credits file:', error);
+    return { used: 0, month: new Date().getMonth() };
   }
-  return JSON.parse(fs.readFileSync(CREDITS_FILE));
 }
 
 /**
@@ -22,7 +34,11 @@ function loadCredits() {
  * @param {Object} credits 
  */
 function saveCredits(credits) {
-  fs.writeFileSync(CREDITS_FILE, JSON.stringify(credits, null, 2));
+  try {
+    fs.writeFileSync(CREDITS_FILE, JSON.stringify(credits, null, 2));
+  } catch (error) {
+    console.error('[Credits] Error saving credits file:', error);
+  }
 }
 
 /**

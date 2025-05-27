@@ -1,16 +1,23 @@
 const ActionBase = require('./ActionBase');
 const fs = require('fs');
 const path = require('path');
+const pathManager = require('../util/pathManager');
 
-const ALARMS_FILE_PATH = path.join(__dirname, '..', '..', 'data', 'alarms.json');
+const ALARMS_FILE_PATH = pathManager.getAlarmsPath();
 
 // Ensure the data directory and alarms.json file exist
-const dataDir = path.dirname(ALARMS_FILE_PATH);
-if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-}
-if (!fs.existsSync(ALARMS_FILE_PATH)) {
-    fs.writeFileSync(ALARMS_FILE_PATH, JSON.stringify([]), 'utf8');
+function initializeAlarmFile() {
+    try {
+        const dataDir = pathManager.getDataDir();
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+        }
+        if (!fs.existsSync(ALARMS_FILE_PATH)) {
+            fs.writeFileSync(ALARMS_FILE_PATH, JSON.stringify([]), 'utf8');
+        }
+    } catch (error) {
+        console.error('[CreateAlarm] Failed to initialize alarm file:', error);
+    }
 }
 
 class CreateAlarm extends ActionBase {
@@ -42,6 +49,9 @@ class CreateAlarm extends ActionBase {
 
     // Context will be passed by ActionsManager to execute
     async execute(params, context) {
+        // Initialize file if needed
+        initializeAlarmFile();
+        
         const { time, label } = params;
         let currentChatId = null;
 

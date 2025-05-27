@@ -3,14 +3,31 @@ const ActionBase = require('./ActionBase');
 const fs = require('fs');
 const path = require('path');
 const { numTokensFromString } = require('../util/tokenCounter');
+const pathManager = require('../util/pathManager');
 
-const NOTES_FILE = path.join(__dirname, '../../data/notes.txt');
+const NOTES_FILE = pathManager.getNotesPath();
 const MAX_TOKENS = 100000;
 
-if (!fs.existsSync(NOTES_FILE)) fs.writeFileSync(NOTES_FILE, '');
+// Initialize notes file if missing
+function initializeNotesFile() {
+  try {
+    const dataDir = pathManager.getDataDir();
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    if (!fs.existsSync(NOTES_FILE)) {
+      fs.writeFileSync(NOTES_FILE, '');
+    }
+  } catch (error) {
+    console.error('[MakeNote] Failed to initialize notes file:', error);
+  }
+}
 
 class MakeNote extends ActionBase {
   async execute(params) {
+    // Initialize file if needed
+    initializeNotesFile();
+    
     // Extract and trim the note value
     const note = params.note ? params.note.trim() : "";
     console.log("MakeNote received note:", note);
@@ -48,13 +65,13 @@ class MakeNote extends ActionBase {
 }
 
 function archiveNotes(notes) {
-  const archiveFile = path.join(__dirname, '../../data/archivedNotes.json');
+  const archiveFile = pathManager.getArchivedNotesPath();
   let archived = fs.existsSync(archiveFile)
     ? JSON.parse(fs.readFileSync(archiveFile))
     : [];
   archived.push({ archivedAt: new Date().toISOString(), notes });
   fs.writeFileSync(archiveFile, JSON.stringify(archived, null, 2));
-  fs.writeFileSync(path.join(__dirname, '../../data/notes.txt'), '');
+  fs.writeFileSync(NOTES_FILE, '');
 }
 
 module.exports = MakeNote;

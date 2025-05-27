@@ -2,8 +2,9 @@
 const ActionBase = require('./ActionBase');
 const fs = require('fs');
 const path = require('path');
+const pathManager = require('../util/pathManager');
 
-const EVENTS_FILE = path.join(__dirname, '../../data/events.json');
+const EVENTS_FILE = pathManager.getEventsPath();
 
 class CheckEvents extends ActionBase {
   /**
@@ -12,16 +13,31 @@ class CheckEvents extends ActionBase {
    * @returns {Array} Matching events (max 100)
    */
   async execute(criteria) {
-    let events = JSON.parse(fs.readFileSync(EVENTS_FILE));
-    for (const key in criteria) {
-      events = events.filter(event => event[key] === criteria[key]);
+    try {
+      // Ensure events file exists
+      if (!fs.existsSync(EVENTS_FILE)) {
+        const dataDir = pathManager.getDataDir();
+        if (!fs.existsSync(dataDir)) {
+          fs.mkdirSync(dataDir, { recursive: true });
+        }
+        fs.writeFileSync(EVENTS_FILE, JSON.stringify([], null, 2));
+        return []; // Return empty array if file was just created
+      }
+      
+      let events = JSON.parse(fs.readFileSync(EVENTS_FILE));
+      for (const key in criteria) {
+        events = events.filter(event => event[key] === criteria[key]);
+      }
+      // Return null if events exceed 100
+      if (events.length > 100) {
+        return null;
+      }
+      // Limit result to 100 events
+      return events.slice(0, 100);
+    } catch (error) {
+      console.error('[CheckEvents] Error reading events file:', error);
+      return [];
     }
-    // Return null if events exceed 100
-    if (events.length > 100) {
-      return null;
-    }
-    // Limit result to 100 events
-    return events.slice(0, 100);
   }
 
   /**
