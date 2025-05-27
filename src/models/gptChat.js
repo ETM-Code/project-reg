@@ -119,21 +119,21 @@ class GPTChat extends AIModelInterface {
 
     // Transform history using the combined prompt and context
 // --- Add Logging Here ---
-    console.log("--- DEBUG: Prompt Components ---");
-    console.log("Base Prompt Content:", basePrompt);
-    console.log("Custom Instructions:", customInstructions);
-    console.log("Context Text:", contextText);
-    console.log("Final System Prompt (before transform):", finalSystemPrompt);
+    // console.log("--- DEBUG: Prompt Components ---");
+    // console.log("Base Prompt Content:", basePrompt);
+    // console.log("Custom Instructions:", customInstructions);
+    // console.log("Context Text:", contextText);
+    // console.log("Final System Prompt (before transform):", finalSystemPrompt);
     // --- End Logging ---
     const messages = this._transformHistory(history, finalSystemPrompt, contextText);
 
     // Determine tools for this call
     const toolsForApi = options.tools?.map(tool => ({ type: "function", function: tool })) || [];
 
-    console.log(`[GPTChat] Sending messages to ${this.modelName}:`, JSON.stringify(messages, null, 2));
-    if (toolsForApi.length > 0) {
-        console.log(`[GPTChat] Providing tools:`, JSON.stringify(toolsForApi, null, 2));
-    }
+    // console.log(`[GPTChat] Sending messages to ${this.modelName}:`, JSON.stringify(messages, null, 2));
+    // if (toolsForApi.length > 0) {
+    //     console.log(`[GPTChat] Providing tools:`, JSON.stringify(toolsForApi, null, 2));
+    // }
 
     try {
       const stream = await this.openaiClient.chat.completions.create({

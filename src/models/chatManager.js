@@ -762,6 +762,34 @@ async function batchCheckAndGenerateTitles() {
     }
 }
 
+/**
+ * Sets the default personality for new chats and saves it to settings.
+ * @param {string} personalityId - The ID of the personality to set as default.
+ * @throws {Error} If personality config is not found or settings save fails.
+ */
+async function setDefaultPersonality(personalityId) {
+  console.log(`[ChatManager] Setting default personality to: ${personalityId}`);
+  
+  // Validate that the personality exists
+  const personality = settingsManager.getPersonalityById(personalityId);
+  if (!personality) {
+    throw new Error(`[ChatManager] Personality configuration not found for ID: ${personalityId}`);
+  }
+  
+  try {
+    // Save to settings manager
+    await settingsManager.saveGlobalSetting('personalityId', personalityId);
+    console.log(`[ChatManager] Default personality saved to settings: ${personalityId}`);
+    
+    // Also update the current personality for immediate effect
+    await setActivePersonality(personalityId);
+    
+  } catch (error) {
+    console.error(`[ChatManager] Failed to save default personality ${personalityId}:`, error);
+    throw error;
+  }
+}
+
 module.exports = {
   setActivePersonality, // Renamed from initialize
   appendUserMessage,
@@ -779,6 +807,7 @@ module.exports = {
   batchCheckAndGenerateTitles, // Export the new function
   checkAndDeleteEmptyChat, // Keep helper exported if needed by IPC layer
   setCurrentChatPersonality, // Export the new function
-  executeToolAndAppendResponse // Export the new helper
+  executeToolAndAppendResponse, // Export the new helper
+  setDefaultPersonality // Export the new function
   // REMOVED: toolDeclarations export
 };

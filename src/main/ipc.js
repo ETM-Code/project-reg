@@ -71,7 +71,17 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
              mainWindow.webContents.send('chat-deleted', deletedChatId);
         }
         if (success) {
-            return history; // Return the history of the loaded chat on success
+            // Also get the current personality and model info for the loaded chat
+            const currentPersonality = chatManager.getCurrentPersonalityConfig();
+            const currentModel = chatManager.getActiveModelInstance();
+            
+            return {
+                history: history,
+                personalityId: currentPersonality?.id,
+                personalityName: currentPersonality?.name,
+                modelId: currentModel?.getModelName(),
+                modelName: currentModel?.getModelName() // In case they're different
+            };
         } else {
             // Handle load failure - maybe return null or throw an error?
             // Returning null for now, renderer should handle this.
@@ -82,16 +92,26 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
 
     // Handler for editing a message (changed to ipcMain.on for streaming)
     ipcMain.on('edit-message', async (event, { chatId, messageId, newContent }) => { // Use messageId
+        // Check if the sender is destroyed before proceeding
+        if (event.sender.isDestroyed()) {
+            console.warn(`[IPC Edit] Cannot process edit request: sender has been destroyed`);
+            return;
+        }
+
         // Ensure the correct chat is loaded AND the ID is valid before proceeding
         const currentChatIdFromManager = chatManager.getCurrentChatId();
         if (!currentChatIdFromManager || typeof currentChatIdFromManager !== 'string') {
             console.error(`[IPC Edit] Invalid or missing currentChatId ('${currentChatIdFromManager}') in chatManager when trying to edit.`);
-            if (mainWindow) mainWindow.webContents.send('streamError', { message: "Error: Chat session not fully initialized. Cannot edit message." });
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('streamError', { message: "Error: Chat session not fully initialized. Cannot edit message." });
+            }
             return; // Stop processing
         }
         if (currentChatIdFromManager !== chatId) {
             console.warn(`[IPC Edit] Attempting to edit message in non-active chat ${chatId}. Current: ${currentChatIdFromManager}`);
-            if (mainWindow) mainWindow.webContents.send('streamError', { message: `Error: Cannot edit message in a non-active chat.` });
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('streamError', { message: `Error: Cannot edit message in a non-active chat.` });
+            }
             return; // Stop processing
         }
 
@@ -112,7 +132,7 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
             // Check if the edit itself failed (e.g., messageId not found) or if model response failed
             if (modelResult && modelResult.error) {
                 console.error(`[IPC Edit] Edit or model response failed for message ID ${messageId}. Error: ${modelResult.error}`);
-                if (mainWindow) {
+                if (mainWindow && !mainWindow.isDestroyed()) {
                     // Send specific error back
                     mainWindow.webContents.send('streamError', { message: modelResult.error });
                     mainWindow.webContents.send('streamFinalResponse', { text: "" }); // Ensure stream ends
@@ -130,7 +150,9 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
 
             if (!activeModel) {
                  console.error("[IPC Edit] No active model instance found after edit call.");
-                 if (mainWindow) mainWindow.webContents.send('streamError', { message: "Internal error: Model instance lost after edit." });
+                 if (mainWindow && !mainWindow.isDestroyed()) {
+                     mainWindow.webContents.send('streamError', { message: "Internal error: Model instance lost after edit." });
+                 }
                  return;
             }
             const modelType = activeModel.getImplementationType();
@@ -145,13 +167,21 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
                         break;
                     }
 
+                    // Check if sender is still valid before sending partial responses
+                    if (event.sender.isDestroyed()) {
+                        console.warn('[IPC Edit] Sender destroyed during streaming, aborting');
+                        break;
+                    }
+
                     // Use same stream processing logic as in main.js's chatMessage handler
                     if (modelType === 'gpt') {
                         if (chunk.choices && chunk.choices[0].delta) {
                             const delta = chunk.choices[0].delta;
                             if (delta.content) {
                                 responseBuffer += delta.content;
-                                if (mainWindow) mainWindow.webContents.send('streamPartialResponse', { text: delta.content });
+                                if (mainWindow && !mainWindow.isDestroyed()) {
+                                    mainWindow.webContents.send('streamPartialResponse', { text: delta.content });
+                                }
                             }
                             if (delta.tool_calls) {
                                 rawToolDataForHistory = rawToolDataForHistory || [];
@@ -177,7 +207,9 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
                             for (const part of chunk.candidates[0].content.parts) {
                                 if (part.text) {
                                     responseBuffer += part.text;
-                                    if (mainWindow) mainWindow.webContents.send('streamPartialResponse', { text: part.text });
+                                    if (mainWindow && !mainWindow.isDestroyed()) {
+                                        mainWindow.webContents.send('streamPartialResponse', { text: part.text });
+                                    }
                                 }
                                 if (part.functionCall) {
                                     detectedToolCalls.push({ id: `gemini_call_${Date.now()}_${detectedToolCalls.length}`, name: part.functionCall.name, arguments: part.functionCall.args });
@@ -185,7 +217,9 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
                             }
                         } else if (chunk.text) {
                             responseBuffer += chunk.text;
-                            if (mainWindow) mainWindow.webContents.send('streamPartialResponse', { text: chunk.text });
+                            if (mainWindow && !mainWindow.isDestroyed()) {
+                                mainWindow.webContents.send('streamPartialResponse', { text: chunk.text });
+                            }
                         }
                     }
                 } // End stream processing
@@ -244,7 +278,9 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
             }
 
             // Send final response text
-            if (mainWindow) mainWindow.webContents.send('streamFinalResponse', { text: responseBuffer });
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('streamFinalResponse', { text: responseBuffer });
+            }
 
             // --- Final Save ---
             // Saving the history after the full interaction (including model response) should happen centrally.
@@ -267,18 +303,19 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
                  console.error("[IPC Edit] Could not save history after edit - missing info.");
             }
 
-
         } catch (error) {
             // Check if error is due to abort
             if (error.name === 'AbortError' || streamState.currentAbortController?.signal.aborted) {
                 console.log("[IPC Edit] Edit message processing aborted by user");
                 // Send abort confirmation to renderer
-                if (mainWindow) mainWindow.webContents.send('streamStopped', { message: 'Edit stream stopped by user' });
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('streamStopped', { message: 'Edit stream stopped by user' });
+                }
                 return; // Exit gracefully
             }
             
             console.error("[IPC Edit] Error processing edit message stream:", error);
-            if (mainWindow) {
+            if (mainWindow && !mainWindow.isDestroyed()) {
                  mainWindow.webContents.send('streamError', { message: "Error processing edit: " + error.message });
                  mainWindow.webContents.send('streamFinalResponse', { text: "" }); // Ensure stream ends
             }

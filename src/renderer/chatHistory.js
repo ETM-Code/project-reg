@@ -119,10 +119,16 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log(`Requesting to load chat: ${chatId}`);
     try {
       // Invoke the backend handler to load the chat data AND set it as active
-      const history = await window.electronAPI.invoke('load-chat', chatId);
+      const chatData = await window.electronAPI.invoke('load-chat', chatId);
       currentChatId = chatId; // Update the current chat ID tracker
 
       clearChatWindow();
+
+      // Extract history and chat metadata
+      const history = chatData ? chatData.history : chatData; // Handle both old and new format
+      const personalityId = chatData?.personalityId;
+      const personalityName = chatData?.personalityName;
+      const modelId = chatData?.modelId;
 
       // Render the loaded history
       if (history && history.length > 0) {
@@ -137,13 +143,26 @@ document.addEventListener('DOMContentLoaded', () => {
          // Use the new programmatic scroll function
          scrollToBottomProgrammatically(chatWindow);
       }
-      console.log(`Successfully loaded chat: ${chatId}`);
+
+      // Update personality display in app.js if we have the data
+      if (personalityName && window.updateActivePersonalityDisplay) {
+        window.updateActivePersonalityDisplay(personalityName);
+        console.log(`[ChatHistory] Updated personality display to: ${personalityName}`);
+      }
+
+      // Update model selector if we have the data
+      if (modelId && window.updateModelSelectorDisplay) {
+        window.updateModelSelectorDisplay(modelId);
+        console.log(`[ChatHistory] Updated model selector to: ${modelId}`);
+      }
+
+      console.log(`Successfully loaded chat: ${chatId} (Personality: ${personalityName}, Model: ${modelId})`);
       // Highlight the selected chat in the list (optional)
       updateChatListSelection();
 
       // Reset the message index counter in app.js
       if (window.resetAppMessageCounter) {
-        window.resetAppMessageCounter(history.length);
+        window.resetAppMessageCounter(history ? history.length : 0);
       }
 
     } catch (error) {
@@ -246,6 +265,9 @@ document.addEventListener('DOMContentLoaded', () => {
        // updateChatListSelection(); // Might need adjustment if currentChatId isn't set yet
    }
 
+   // Expose the function globally so app.js can call it
+   window.addChatToHistoryList = addChatToHistoryList;
+
    // --- Event Listeners ---
    newChatBtn.addEventListener('click', startNewChat);
 
@@ -253,7 +275,14 @@ document.addEventListener('DOMContentLoaded', () => {
   loadChatList();
 
   // Listen for title updates from the main process
-  window.electronAPI.onTitleUpdate(updateChatItemTitle);
+  window.electronAPI.onTitleUpdate((data) => {
+    // Handle the event data format: { chatId, newTitle }
+    if (data && data.chatId && data.newTitle) {
+      updateChatItemTitle(data.chatId, data.newTitle);
+    } else {
+      console.warn('Invalid title update data received:', data);
+    }
+  });
   window.electronAPI.onChatDeleted(removeChatItem); // Listen for chat deletion events
 
   // TODO: Consider how to get the initial currentChatId from app.js or backend
@@ -307,67 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Expose a function to get the current chat ID for other modules
 window.getCurrentChatId = () => {
-  // This needs to be defined outside the DOMContentLoaded if currentChatId is managed there
-  // For now, assuming currentChatId is accessible in this scope.
-  // If currentChatId is defined inside DOMContentLoaded, this might return undefined if called before.
-  // Let's ensure currentChatId is accessible or this function is also defined inside DOMContentLoaded.
-  // Based on the original code, currentChatId is in the scope of DOMContentLoaded.
-  // To make this work, currentChatId would need to be at a higher scope or this function moved.
-  // For simplicity, and given the original structure, we'll assume it works as is,
-  // but this is a potential refactoring point if issues arise.
-  // The original code has currentChatId defined at the top of DOMContentLoaded.
-  const chatListDiv = document.getElementById('chatList'); // Temp to get currentChatId if needed
+  const chatListDiv = document.getElementById('chatList');
   const selectedItem = chatListDiv ? chatListDiv.querySelector('.selected-chat') : null;
-  return selectedItem ? selectedItem.dataset.chatId : null; // Fallback if direct currentChatId is tricky
+  return selectedItem ? selectedItem.dataset.chatId : null;
 };
-
-// Expose function to add chat items dynamically
-// Ensure addChatToHistoryList is defined in the scope if it's not already global
-// Original code has it defined within DOMContentLoaded, so this re-exposure is fine.
-window.addChatToHistoryList = (chatData) => {
-    // Assuming addChatToHistoryList is defined within the DOMContentLoaded scope
-    // This is a re-declaration if addChatToHistoryList is already global.
-    // The original code defines addChatToHistoryList inside DOMContentLoaded.
-    // To call it globally, it must be explicitly attached to window.
-    // The original code already does this at the end of the file.
-    // This is redundant if the original window.addChatToHistoryList = addChatToHistoryList; is kept.
-    // For safety, ensuring it's callable.
-    const localAddChatFunc = window.addChatToHistoryListInternal || addChatToHistoryList; // Access the one from DOMContentLoaded
-    if (typeof localAddChatFunc === 'function') {
-        localAddChatFunc(chatData);
-    } else {
-        console.error("addChatToHistoryList function not found for global exposure.");
-    }
-};
-// Make sure the original addChatToHistoryList is assigned to window.addChatToHistoryListInternal if needed
-// Or simply rely on the original window.addChatToHistoryList = addChatToHistoryList; at the end of the file.
-// The original structure is:
-// document.addEventListener('DOMContentLoaded', () => {
-//   function addChatToHistoryList(...) {...}
-//   ...
-// });
-// window.addChatToHistoryList = addChatToHistoryList; // This line is problematic as addChatToHistoryList is not in global scope here.
-
-// Correct way to expose functions defined inside DOMContentLoaded:
-// Define them on window object from *inside* the DOMContentLoaded listener.
-// The original code for window.addChatToHistoryList = addChatToHistoryList; was outside,
-// which would not work correctly. It should be:
-// document.addEventListener('DOMContentLoaded', () => {
-//   function addChatToHistoryList(...) {...}
-//   window.addChatToHistoryList = addChatToHistoryList; // Expose from inside
-//   ...
-// });
-// The provided diff will place the new window.chatHistoryScrollToBottomIfAppropriate inside, which is correct.
-// The existing window.getCurrentChatId and window.addChatToHistoryList might need adjustment if they rely on
-// variables scoped only to DOMContentLoaded and are called from outside before DOMContentLoaded fires
-// or if their definition is outside DOMContentLoaded but they refer to vars inside.
-// The original code for window.addChatToHistoryList = addChatToHistoryList; is at the very end,
-// outside DOMContentLoaded, which means it would assign 'undefined' if addChatToHistoryList is not global.
-// It seems addChatToHistoryList *is* intended to be exposed.
-// The fix is to move `window.addChatToHistoryList = addChatToHistoryList;` inside the DOMContentLoaded.
-// And `window.getCurrentChatId` also.
-
-// The diff correctly places the new scroll logic and its exposure inside DOMContentLoaded.
-// I will assume the existing global exposures (getCurrentChatId, addChatToHistoryList)
-// are handled correctly or will be fixed separately if they cause issues.
-// The current task is focused on the scroll logic.

@@ -136,12 +136,12 @@ class GeminiChat extends AIModelInterface {
 
     // Transform history
 // --- Add Logging Here ---
-    console.log("--- DEBUG: Prompt Components (Gemini) ---");
-    console.log("Base Prompt ID:", this.personality?.promptId);
-    console.log("Custom Instructions:", customInstructions);
-    console.log("Context Set IDs:", this.personality?.defaultContextSetIds);
-    console.log("Context Text:", contextText);
-    console.log("Final System Instruction Content (before transform):", finalSystemPromptContent);
+    // console.log("--- DEBUG: Prompt Components (Gemini) ---");
+    // console.log("Base Prompt ID:", this.personality?.promptId);
+    // console.log("Custom Instructions:", customInstructions);
+    // console.log("Context Set IDs:", this.personality?.defaultContextSetIds);
+    // console.log("Context Text:", contextText);
+    // console.log("Final System Instruction Content (before transform):", finalSystemPromptContent);
     // --- End Logging ---
     const geminiHistory = this._transformHistory(history);
 

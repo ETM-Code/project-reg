@@ -326,6 +326,18 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
   // Expose theme function for settings modal
   window.applyTheme = applyTheme;
 
+  // Expose functions for chat loading to update UI
+  window.updateActivePersonalityDisplay = updateActivePersonalityDisplay;
+  window.updateModelSelectorDisplay = (modelId) => {
+    const modelSelector = document.getElementById('modelSelector');
+    if (modelSelector && modelId) {
+      modelSelector.value = modelId;
+      // Trigger event to notify customDropdown.js to update display
+      modelSelector.dispatchEvent(new CustomEvent('optionsUpdated', { bubbles: true }));
+      console.log(`[App] Updated model selector to: ${modelId}`);
+    }
+  };
+
   // --- Event Listeners ---
   userInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1172,12 +1184,24 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
 
   // Initialize Personality Selector Component
   if (personalitySelector && openPersonalitySelectorBtn) {
-    personalitySelector.init(handleCurrentChatPersonalitySelect);
-    openPersonalitySelectorBtn.addEventListener('click', () => {
-      personalitySelector.show();
-    });
+    try {
+      console.log('[App] Initializing personality selector component...');
+      await personalitySelector.init(handleCurrentChatPersonalitySelect);
+      console.log('[App] Personality selector initialized successfully');
+      
+      openPersonalitySelectorBtn.addEventListener('click', () => {
+        personalitySelector.show();
+      });
+    } catch (error) {
+      console.error('[App] Failed to initialize personality selector:', error);
+      // Disable the button if initialization fails
+      if (openPersonalitySelectorBtn) {
+        openPersonalitySelectorBtn.disabled = true;
+        openPersonalitySelectorBtn.title = 'Personality selector failed to load';
+      }
+    }
   } else {
-    console.error("Failed to initialize personality selector: Component or button not found.");
+    console.error("[App] Failed to initialize personality selector: Component or button not found.");
   }
 
   // NOTE: Assuming customDropdown.js initializes itself and handles clicks

@@ -5,6 +5,32 @@
 // import 'swiper/swiper-bundle.css'; // Example if using modules
 // import particlesJS from 'particles.js'; // Example if using modules
 
+// Load the HTML component
+async function loadComponent() {
+    try {
+        const response = await fetch('./components/personalitySelector.html');
+        if (!response.ok) {
+            throw new Error(`Failed to load component: ${response.status}`);
+        }
+        const html = await response.text();
+        
+        // Create a temporary container to parse the HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        
+        // Append all elements to the body
+        while (tempDiv.firstChild) {
+            document.body.appendChild(tempDiv.firstChild);
+        }
+        
+        console.log('[PersonalitySelector] Component HTML loaded successfully');
+        return true;
+    } catch (error) {
+        console.error('[PersonalitySelector] Failed to load component HTML:', error);
+        return false;
+    }
+}
+
 let swiperInstance = null;
 let personalities = [];
 let allPersonalities = []; // Store all personalities including disabled ones
@@ -14,35 +40,35 @@ let availableTools = ['MakeNote', 'CreateEvent', 'CheckEvents', 'startTimer', 'c
 let onSelectCallback = null; // Callback to notify app.js
 let currentEditingPersonality = null; // For edit mode
 
-// DOM elements
-const selectorOverlay = document.getElementById('personality-selector-overlay');
-const carouselWrapper = document.querySelector('#personality-carousel .swiper-wrapper');
-const closeButton = document.getElementById('close-personality-selector');
-const settingsBtn = document.getElementById('personality-settings-btn');
-const settingsDropdown = document.getElementById('personality-settings-dropdown');
-const createNewBtn = document.getElementById('create-new-personality-btn');
-const personalityAvailabilityList = document.getElementById('personality-availability-list');
+// DOM elements (will be set after component loads)
+let selectorOverlay = null;
+let carouselWrapper = null;
+let closeButton = null;
+let settingsBtn = null;
+let settingsDropdown = null;
+let createNewBtn = null;
+let personalityAvailabilityList = null;
 
 // Editor modal elements
-const editorOverlay = document.getElementById('personality-editor-overlay');
-const editorTitle = document.getElementById('personality-editor-title');
-const closeEditorBtn = document.getElementById('close-personality-editor');
-const cancelEditorBtn = document.getElementById('cancel-personality-editor');
-const savePersonalityBtn = document.getElementById('save-personality');
-const editorForm = document.getElementById('personality-editor-form');
+let editorOverlay = null;
+let editorTitle = null;
+let closeEditorBtn = null;
+let cancelEditorBtn = null;
+let savePersonalityBtn = null;
+let editorForm = null;
 
 // Form elements
-const nameInput = document.getElementById('personality-name');
-const descriptionInput = document.getElementById('personality-description');
-const iconInput = document.getElementById('personality-icon');
-const promptInput = document.getElementById('personality-prompt');
-const modelSelect = document.getElementById('personality-model');
-const customInstructionsInput = document.getElementById('personality-custom-instructions');
-const availableContextSetsDiv = document.getElementById('available-context-sets');
-const defaultContextSetsDiv = document.getElementById('default-context-sets');
-const personalityToolsDiv = document.getElementById('personality-tools');
-const browseIconBtn = document.getElementById('browse-icon-btn');
-const browseContextFilesBtn = document.getElementById('browse-context-files-btn');
+let nameInput = null;
+let descriptionInput = null;
+let iconInput = null;
+let promptInput = null;
+let modelSelect = null;
+let customInstructionsInput = null;
+let availableContextSetsDiv = null;
+let defaultContextSetsDiv = null;
+let personalityToolsDiv = null;
+let browseIconBtn = null;
+let browseContextFilesBtn = null;
 
 function initSwiper() {
     if (swiperInstance) {
@@ -667,13 +693,93 @@ function hide() {
     }
 }
 
-function init(callback) {
-    if (!selectorOverlay || !carouselWrapper || !closeButton) {
-        console.error("Personality Selector UI elements not found.");
-        return;
+// Update global DOM element references after component is loaded
+function updateDOMReferences(selectorOverlayEl, carouselWrapperEl, closeButtonEl, settingsBtnEl, 
+                           settingsDropdownEl, createNewBtnEl, personalityAvailabilityListEl, 
+                           editorOverlayEl, editorTitleEl, closeEditorBtnEl, cancelEditorBtnEl, 
+                           savePersonalityBtnEl, editorFormEl, nameInputEl, descriptionInputEl, 
+                           iconInputEl, promptInputEl, modelSelectEl, customInstructionsInputEl,
+                           availableContextSetsDivEl, defaultContextSetsDivEl, personalityToolsDivEl,
+                           browseIconBtnEl, browseContextFilesBtnEl) {
+    // Update global variables
+    selectorOverlay = selectorOverlayEl;
+    carouselWrapper = carouselWrapperEl;
+    closeButton = closeButtonEl;
+    settingsBtn = settingsBtnEl;
+    settingsDropdown = settingsDropdownEl;
+    createNewBtn = createNewBtnEl;
+    personalityAvailabilityList = personalityAvailabilityListEl;
+    editorOverlay = editorOverlayEl;
+    editorTitle = editorTitleEl;
+    closeEditorBtn = closeEditorBtnEl;
+    cancelEditorBtn = cancelEditorBtnEl;
+    savePersonalityBtn = savePersonalityBtnEl;
+    editorForm = editorFormEl;
+    nameInput = nameInputEl;
+    descriptionInput = descriptionInputEl;
+    iconInput = iconInputEl;
+    promptInput = promptInputEl;
+    modelSelect = modelSelectEl;
+    customInstructionsInput = customInstructionsInputEl;
+    availableContextSetsDiv = availableContextSetsDivEl;
+    defaultContextSetsDiv = defaultContextSetsDivEl;
+    personalityToolsDiv = personalityToolsDivEl;
+    browseIconBtn = browseIconBtnEl;
+    browseContextFilesBtn = browseContextFilesBtnEl;
+}
+
+async function init(callback) {
+    onSelectCallback = callback; // Store the callback function
+    
+    // First load the component HTML, then initialize
+    const success = await loadComponent();
+    if (!success) {
+        console.error("Personality Selector failed to load component HTML.");
+        throw new Error("Failed to load personality selector component HTML");
     }
     
-    onSelectCallback = callback; // Store the callback function
+    // Get DOM elements after HTML is loaded
+    const selectorOverlay = document.getElementById('personality-selector-overlay');
+    const carouselWrapper = document.querySelector('#personality-carousel .swiper-wrapper');
+    const closeButton = document.getElementById('close-personality-selector');
+    const settingsBtn = document.getElementById('personality-settings-btn');
+    const settingsDropdown = document.getElementById('personality-settings-dropdown');
+    const createNewBtn = document.getElementById('create-new-personality-btn');
+    const personalityAvailabilityList = document.getElementById('personality-availability-list');
+
+    // Editor modal elements
+    const editorOverlay = document.getElementById('personality-editor-overlay');
+    const editorTitle = document.getElementById('personality-editor-title');
+    const closeEditorBtn = document.getElementById('close-personality-editor');
+    const cancelEditorBtn = document.getElementById('cancel-personality-editor');
+    const savePersonalityBtn = document.getElementById('save-personality');
+    const editorForm = document.getElementById('personality-editor-form');
+
+    // Form elements
+    const nameInput = document.getElementById('personality-name');
+    const descriptionInput = document.getElementById('personality-description');
+    const iconInput = document.getElementById('personality-icon');
+    const promptInput = document.getElementById('personality-prompt');
+    const modelSelect = document.getElementById('personality-model');
+    const customInstructionsInput = document.getElementById('personality-custom-instructions');
+    const availableContextSetsDiv = document.getElementById('available-context-sets');
+    const defaultContextSetsDiv = document.getElementById('default-context-sets');
+    const personalityToolsDiv = document.getElementById('personality-tools');
+    const browseIconBtn = document.getElementById('browse-icon-btn');
+    const browseContextFilesBtn = document.getElementById('browse-context-files-btn');
+    
+    if (!selectorOverlay || !carouselWrapper || !closeButton) {
+        console.error("Personality Selector UI elements not found after loading component.");
+        throw new Error("Required personality selector UI elements not found");
+    }
+    
+    // Update global DOM element references
+    updateDOMReferences(selectorOverlay, carouselWrapper, closeButton, settingsBtn, settingsDropdown, 
+                      createNewBtn, personalityAvailabilityList, editorOverlay, editorTitle, 
+                      closeEditorBtn, cancelEditorBtn, savePersonalityBtn, editorForm,
+                      nameInput, descriptionInput, iconInput, promptInput, modelSelect,
+                      customInstructionsInput, availableContextSetsDiv, defaultContextSetsDiv,
+                      personalityToolsDiv, browseIconBtn, browseContextFilesBtn);
     
     // Event listeners
     closeButton.addEventListener('click', hide);
@@ -779,6 +885,8 @@ function init(callback) {
     loadModels();
     loadContextSets();
     populateTools();
+    
+    console.log('[PersonalitySelector] Component initialized successfully');
 }
 
 // Export functions to be used by app.js
