@@ -56,7 +56,7 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
         const { newChatId, deletedChatId, error } = await chatManager.startNewChat(); // Get result object
         // REMOVED: Explicit saveChat call here. Let the first interaction save it.
         // Notify renderer if a previous chat was deleted
-        if (deletedChatId && mainWindow) {
+        if (deletedChatId && mainWindow && !mainWindow.isDestroyed()) {
             console.log(`[IPC] Notifying renderer of deleted chat: ${deletedChatId}`);
             mainWindow.webContents.send('chat-deleted', deletedChatId);
         }
@@ -66,7 +66,7 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
     ipcMain.handle('load-chat', async (_, chatId) => {
         const { success, history, deletedChatId } = await chatManager.loadChat(chatId); // Get result object
         // Notify renderer if a previous chat was deleted during the load process
-        if (deletedChatId && mainWindow) {
+        if (deletedChatId && mainWindow && !mainWindow.isDestroyed()) {
              console.log(`[IPC] Notifying renderer of deleted chat: ${deletedChatId}`);
              mainWindow.webContents.send('chat-deleted', deletedChatId);
         }
@@ -692,7 +692,11 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
 
     // --- Window Control IPC Handler ---
     ipcMain.on('window-control', (event, action) => {
-        if (!mainWindow) return;
+        if (!mainWindow || mainWindow.isDestroyed()) {
+            console.warn(`[IPC] Cannot handle window-control action "${action}": mainWindow is destroyed or null`);
+            return;
+        }
+        
         switch (action) {
             case 'minimize':
                 mainWindow.minimize();
