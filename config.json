@@ -17,7 +17,7 @@
   },
   "availableModels": [
     {
-      "id": "gpt-40-mini",
+      "id": "gpt-4o-mini",
       "name": "GPT-4o-Mini",
       "implementation": "gpt",
       "provider": "openai"
@@ -37,12 +37,6 @@
     {
       "id": "gpt-4.1-nano",
       "name": "GPT-4.1-nano",
-      "implementation": "gpt",
-      "provider": "openai"
-    },
-    {
-      "id": "gpt-4.5-preview",
-      "name": "GPT-4.5",
       "implementation": "gpt",
       "provider": "openai"
     },
@@ -77,9 +71,12 @@
   ],
   "defaults": {
     "personalityId": "reg-lifecoach",
-    "modelId": "gpt-4.5-preview",
+    "modelId": "gpt-4.1",
     "defaultModel": "gemini-2.5-flash-preview-04-17",
     "theme": "dark"
+  },
+  "universalInstructions": {
+    "markdown": "\n\n## Response Formatting Instructions\n\nWhen responding, always use proper markdown formatting for better readability:\n\n- Use **bold** for emphasis and important points\n- Use *italics* for subtle emphasis or terminology\n- Use `code` formatting for technical terms, file names, or short code snippets\n- Use ```language code blocks``` for longer code examples\n- Use > blockquotes for important notes or quotes\n- Use numbered lists (1. 2. 3.) for sequential steps or procedures\n- Use bullet points (- or *) for general lists and features\n- Use ## Headings to organize longer responses into clear sections\n- Use tables when presenting structured data\n- Use horizontal rules (---) to separate major sections when appropriate\n\nAlways prioritize clarity and readability in your formatting choices."
   },
   "fontSettings": {
     "defaultFont": "Geometric Sans",
@@ -202,7 +199,7 @@
         "createNotification",
         "createAlarm"
       ],
-      "modelId": "gpt-4.5-preview",
+      "modelId": "gpt-4.1",
       "allowCustomInstructions": true,
       "customInstructions": "",
       "disabled": false

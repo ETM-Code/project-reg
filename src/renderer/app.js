@@ -285,6 +285,13 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
 
   window.getAvailablePersonalities = () => availablePersonalities;
   window.getCurrentDefaultPersonalityId = () => currentDefaultPersonalityId;
+  window.getCurrentActivePersonalityId = () => {
+    // Get the personality from the current active personality name displayed in the header
+    // This should reflect the current chat's personality, not just the default
+    const personalities = availablePersonalities;
+    const currentPersonality = personalities.find(p => p.name === currentActivePersonalityName);
+    return currentPersonality ? currentPersonality.id : currentDefaultPersonalityId;
+  };
   window.handleAppPersonalityChange = handlePersonalityChange;
 
   // --- Active Personality Display Update ---
@@ -459,6 +466,7 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
     bubble.style.color = bubbleTextVar;
 
     let buttonHtml = ''; // Store button HTML separately
+    let personalityIconHtml = ''; // Store personality icon HTML
 
     if (sender === 'user' && messageId) {
       // Create button HTML string
@@ -472,12 +480,81 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
           </svg>
         </button>
       `;
-      // Note: onclick is added globally later or handled by chatHistory.js
+    } else if (sender === 'bot' || sender === 'model') {
+      // Add personality icon for bot messages
+      // Get current active personality data (not default)
+      const personalities = window.getAvailablePersonalities ? window.getAvailablePersonalities() : [];
+      // Try to get the current active personality from the chat manager via a new global function
+      let currentPersonalityId = null;
+      
+      // First try to get the current active personality (for the current chat session)
+      if (window.getCurrentActivePersonalityId) {
+        currentPersonalityId = window.getCurrentActivePersonalityId();
+      }
+      
+      // If not available, fall back to the default personality
+      if (!currentPersonalityId && window.getCurrentDefaultPersonalityId) {
+        currentPersonalityId = window.getCurrentDefaultPersonalityId();
+      }
+      
+      const currentPersonalityConfig = personalities.find(p => p.id === currentPersonalityId);
+      
+      if (currentPersonalityConfig && currentPersonalityConfig.icon) {
+        let iconSrc = currentPersonalityConfig.icon;
+        // Handle different icon path formats
+        if (iconSrc.startsWith('src/renderer/')) {
+          iconSrc = iconSrc.substring('src/renderer/'.length);
+        }
+        if (!iconSrc.startsWith('./') && !iconSrc.startsWith('http') && !iconSrc.startsWith('/')) {
+          iconSrc = './' + iconSrc;
+        }
+        
+        personalityIconHtml = `
+          <img src="${iconSrc}" 
+               alt="${currentPersonalityConfig.name}" 
+               class="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-full object-cover opacity-60 border border-[var(--bot-bubble-text)]/20"
+               onerror="this.style.display='none'">
+        `;
+      }
     }
 
-    // Render markdown content and prepend button HTML
-    bubble.innerHTML = buttonHtml + marked.parse(text);
+    // Enhanced metadata stripping (same logic as chatHistory.js)
+    const metadataRegex = /^(Date: \d{1,2}\/\d{1,2}\/\d{4} \| Time: \d{1,2}:\d{2}:\d{2} \| Since last msg: \d+s\n)|(\(System: [^\)]+\)\n)/;
+    let cleanText = text.replace(metadataRegex, '');
+    
+    // Remove any additional leading/trailing whitespace that might cause blank lines
+    cleanText = cleanText.trim();
+    
+    // Handle cases where there might be multiple system messages or metadata lines
+    const systemMessageRegex = /^\(System: [^\)]+\)\n/gm;
+    cleanText = cleanText.replace(systemMessageRegex, '');
+    
+    // Final trim to ensure no leading/trailing whitespace
+    cleanText = cleanText.trim();
+
+    // Render markdown content and prepend button/icon HTML
+    bubble.innerHTML = buttonHtml + personalityIconHtml + marked.parse(cleanText);
+    
+    // Handle external links to open in browser
+    const links = bubble.querySelectorAll('a');
+    links.forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const url = link.href;
+        if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+          window.electronAPI.sendMessage('open-external-url', url);
+        }
+      });
+    });
+    
     container.appendChild(bubble);
+
+    // Render LaTeX with MathJax if available
+    if (window.MathJax && window.MathJax.typesetPromise) {
+      window.MathJax.typesetPromise([bubble]).catch((err) => {
+        console.warn('MathJax rendering error:', err);
+      });
+    }
 
     // Add click listener for edit button *after* it's in the DOM (if created here)
     // This might be redundant if chatHistory.js adds its own listeners
@@ -502,7 +579,6 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
             }
         };
     }
-
 
     return { container, bubble, rawText: text };
   }
@@ -563,8 +639,19 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
         elementToRemove = nextElement;
       }
 
-      const metadataRegex = /^Date: \d{1,2}\/\d{1,2}\/\d{4} \| Time: \d{1,2}:\d{2}:\d{2} \| Since last msg: \d+s\n/;
-      const cleanNewContent = newContent.replace(metadataRegex, '');
+      const metadataRegex = /^(Date: \d{1,2}\/\d{1,2}\/\d{4} \| Time: \d{1,2}:\d{2}:\d{2} \| Since last msg: \d+s\n)|(\(System: [^\)]+\)\n)/;
+      let cleanNewContent = newContent.replace(metadataRegex, '');
+      
+      // Remove any additional leading/trailing whitespace that might cause blank lines
+      cleanNewContent = cleanNewContent.trim();
+      
+      // Handle cases where there might be multiple system messages or metadata lines
+      const systemMessageRegex = /^\(System: [^\)]+\)\n/gm;
+      cleanNewContent = cleanNewContent.replace(systemMessageRegex, '');
+      
+      // Final trim to ensure no leading/trailing whitespace
+      cleanNewContent = cleanNewContent.trim();
+
       const bubbleDiv = editingContainerElement.querySelector('div:not(button)');
       if(bubbleDiv) {
           // Re-add button HTML before parsing markdown
@@ -670,7 +757,21 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
     }
     typingBubble.rawText += data.text;
     if (typingBubble && typingBubble.bubble) {
-        typingBubble.bubble.innerHTML = marked.parse(typingBubble.rawText);
+        // Preserve any existing icons/buttons at the start of the bubble
+        const existingButton = typingBubble.bubble.querySelector('button');
+        const existingIcon = typingBubble.bubble.querySelector('img');
+        let preservedHtml = '';
+        if (existingButton) preservedHtml += existingButton.outerHTML;
+        if (existingIcon) preservedHtml += existingIcon.outerHTML;
+        
+        typingBubble.bubble.innerHTML = preservedHtml + marked.parse(typingBubble.rawText);
+        
+        // Render LaTeX for streaming content
+        if (window.MathJax && window.MathJax.typesetPromise) {
+          window.MathJax.typesetPromise([typingBubble.bubble]).catch((err) => {
+            console.warn('MathJax streaming render error:', err);
+          });
+        }
     } else {
         console.warn("StreamPartialResponse: typingBubble or bubble is null.");
     }
@@ -690,7 +791,34 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
     if (typingBubble) {
         typingBubble.rawText = data.text;
         if (typingBubble.bubble) {
-            typingBubble.bubble.innerHTML = marked.parse(data.text);
+            // Preserve any existing icons/buttons at the start of the bubble
+            const existingButton = typingBubble.bubble.querySelector('button');
+            const existingIcon = typingBubble.bubble.querySelector('img');
+            let preservedHtml = '';
+            if (existingButton) preservedHtml += existingButton.outerHTML;
+            if (existingIcon) preservedHtml += existingIcon.outerHTML;
+            
+            typingBubble.bubble.innerHTML = preservedHtml + marked.parse(data.text);
+            
+            // Handle external links in final response
+            const links = typingBubble.bubble.querySelectorAll('a');
+            links.forEach(link => {
+              link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const url = link.href;
+                if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+                  window.electronAPI.sendMessage('open-external-url', url);
+                }
+              });
+            });
+            
+            // Render LaTeX for final response
+            if (window.MathJax && window.MathJax.typesetPromise) {
+              window.MathJax.typesetPromise([typingBubble.bubble]).catch((err) => {
+                console.warn('MathJax final render error:', err);
+              });
+            }
+            
             // Call intelligent scroll after updating the bubble
             if (window.chatHistoryScrollToBottomIfAppropriate) {
               window.chatHistoryScrollToBottomIfAppropriate();
@@ -773,7 +901,31 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
      }
   });
 
-  // Listener for results of tool executions, for UI side effects
+  // Listen for personality updates when starting new chats
+  window.electronAPI.onMessage('chat-personality-updated', (data) => {
+    console.log('[App] Received chat-personality-updated:', data);
+    const { personalityId, personalityName, modelId } = data;
+    
+    // Update the personality display
+    if (personalityName && window.updateActivePersonalityDisplay) {
+      window.updateActivePersonalityDisplay(personalityName);
+      console.log(`[App] Updated personality display to: ${personalityName}`);
+    }
+    
+    // Update the model selector display
+    if (modelId && window.updateModelSelectorDisplay) {
+      window.updateModelSelectorDisplay(modelId);
+      console.log(`[App] Updated model selector to: ${modelId}`);
+    }
+    
+    // Update the personality dropdown if available
+    if (personalityId && window.updatePersonalityDropdown) {
+      window.updatePersonalityDropdown(availablePersonalities, personalityId);
+      console.log(`[App] Updated personality dropdown to: ${personalityId}`);
+    }
+  });
+
+  // Listen for results of tool executions, for UI side effects
   window.electronAPI.onMessage('tool-execution-result', (data) => {
     console.log('[App] Received tool-execution-result:', data);
     const { toolName, result, chatIdFromMain } = data; // Assuming main.js sends chatId
@@ -1361,5 +1513,41 @@ document.addEventListener('DOMContentLoaded', async () => { // Make listener asy
     // Don't finalize partial response here - let streamStopped event handler do it
     
     console.log('[App] Stop request sent to main process');
+  }
+
+  // --- Sidebar Toggle Functionality ---
+  const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+  const sidebar = document.getElementById('sidebar'); // Use the ID we added
+  const mainContent = document.getElementById('mainContent'); // Use the ID we added
+
+  if (sidebarToggleBtn && sidebar) {
+    sidebarToggleBtn.addEventListener('click', () => {
+      // Toggle classes for sidebar and main content
+      if (sidebar.classList.contains('hidden')) {
+        // Show sidebar
+        sidebar.classList.remove('hidden');
+        if (mainContent) {
+          mainContent.classList.remove('sidebar-hidden');
+        }
+        // Update button icon to show open state
+        const icon = sidebarToggleBtn.querySelector('i');
+        if (icon) {
+          icon.className = 'fas fa-bars';
+        }
+      } else {
+        // Hide sidebar
+        sidebar.classList.add('hidden');
+        if (mainContent) {
+          mainContent.classList.add('sidebar-hidden');
+        }
+        // Update button icon to show closed state
+        const icon = sidebarToggleBtn.querySelector('i');
+        if (icon) {
+          icon.className = 'fas fa-chevron-right';
+        }
+      }
+    });
+  } else {
+    console.warn('[App] Sidebar toggle elements not found');
   }
 });

@@ -188,6 +188,15 @@ function getDefaultFont() {
 }
 
 /**
+ * Gets the universal instructions from the configuration.
+ * @returns {object | undefined} The universal instructions object.
+ */
+function getUniversalInstructions() {
+    ensureInitialized();
+    return config.universalInstructions || {};
+}
+
+/**
  * Saves the default font to config.json.
  * @param {string} fontName The name of the font to set as default.
  * @returns {Promise<void>}
@@ -504,4 +513,5 @@ module.exports = {
   savePrompts, // Export new function
   saveContextSets, // Export new function
   // saveSettings, // Export when implemented
+  getUniversalInstructions,
 };

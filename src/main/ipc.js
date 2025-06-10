@@ -402,14 +402,57 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
     });
 
     // Handler to set the personality for the *current chat session only*
-    ipcMain.handle('set-current-chat-personality', async (_, personalityId) => {
+    ipcMain.handle('set-current-chat-personality', async (event, personalityId) => {
         try {
             // Call a new function in chatManager to handle the temporary switch
             await chatManager.setCurrentChatPersonality(personalityId);
             console.log(`[IPC] Current chat session personality temporarily set to: ${personalityId}`);
+            
+            // Get the updated personality and model information to send to renderer
+            const currentPersonality = chatManager.getCurrentPersonalityConfig();
+            const currentModel = chatManager.getActiveModelInstance();
+            
+            if (currentPersonality && currentModel && mainWindow) {
+                // Send update to renderer to update UI displays
+                mainWindow.webContents.send('chat-personality-updated', {
+                    personalityId: currentPersonality.id,
+                    personalityName: currentPersonality.name,
+                    modelId: currentModel.getModelName()
+                });
+                console.log(`[IPC] Sent personality update to renderer: ${currentPersonality.name} with model ${currentModel.getModelName()}`);
+            }
+            
             return { success: true };
         } catch (error) {
             console.error(`[IPC] Error setting current chat personality to ${personalityId}:`, error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Handler to set the model for the *current chat session only*
+    ipcMain.handle('set-current-chat-model', async (event, modelId) => {
+        try {
+            // Call the new function in chatManager to handle the temporary model switch
+            await chatManager.setCurrentChatModel(modelId);
+            console.log(`[IPC] Current chat session model temporarily set to: ${modelId}`);
+            
+            // Get the updated personality and model information to send to renderer
+            const currentPersonality = chatManager.getCurrentPersonalityConfig();
+            const currentModel = chatManager.getActiveModelInstance();
+            
+            if (currentPersonality && currentModel && mainWindow) {
+                // Send update to renderer to update UI displays
+                mainWindow.webContents.send('chat-personality-updated', {
+                    personalityId: currentPersonality.originalPersonalityId || currentPersonality.id,
+                    personalityName: currentPersonality.name,
+                    modelId: currentModel.getModelName()
+                });
+                console.log(`[IPC] Sent model update to renderer: model ${currentModel.getModelName()}`);
+            }
+            
+            return { success: true };
+        } catch (error) {
+            console.error(`[IPC] Error setting current chat model to ${modelId}:`, error);
             return { success: false, error: error.message };
         }
     });

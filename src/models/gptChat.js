@@ -142,8 +142,8 @@ class GPTChat extends AIModelInterface {
         tools: toolsForApi.length > 0 ? toolsForApi : undefined, // Only include if tools exist
         tool_choice: toolsForApi.length > 0 ? "auto" : undefined, // Only include if tools exist
         stream: true,
-        temperature: 0.9,
-        top_p: 0.95,
+        temperature: 0.7,
+        top_p: 0.9,
         frequency_penalty: 0.2,
         presence_penalty: 0.4
       }, {

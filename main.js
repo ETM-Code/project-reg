@@ -119,16 +119,45 @@ app.whenReady().then(async () => { // Make async
 // REMOVED: chatManager.initialize("gpt-4o-mini"); - Will be initialized based on settings later
 
 ipcMain.on('chatMessage', async (event, data) => {
-  const { message } = data; // Removed 'model' - personality is managed internally
-  // REMOVED: Logic to switch model based on 'model' parameter
-
+  const { message, model } = data; // Now we'll use both message and model
+  
   // Create abort controller for this request
   streamState.currentAbortController = new AbortController();
   const abortSignal = streamState.currentAbortController.signal;
 
   // --- ENSURE WE HAVE AN ACTIVE CHAT ---
   let currentChatId = chatManager.getCurrentChatId();
-  console.log(`[main] chatMessage received. Current chat ID: ${currentChatId} (type: ${typeof currentChatId})`);
+  console.log(`[main] chatMessage received. Current chat ID: ${currentChatId} (type: ${typeof currentChatId}). Model: ${model}`);
+  
+  // If a specific model is requested and it's different from the current active model, switch temporarily
+  if (model) {
+    try {
+      const currentModel = chatManager.getActiveModelInstance();
+      const currentModelName = currentModel ? currentModel.getModelName() : null;
+      
+      if (currentModelName !== model) {
+        console.log(`[main] Switching from model ${currentModelName} to ${model} for this chat session`);
+        await chatManager.setCurrentChatModel(model);
+        
+        // Notify renderer of the model change
+        const updatedPersonality = chatManager.getCurrentPersonalityConfig();
+        const updatedModel = chatManager.getActiveModelInstance();
+        
+        if (mainWindow && updatedPersonality && updatedModel) {
+          mainWindow.webContents.send('chat-personality-updated', {
+            personalityId: updatedPersonality.originalPersonalityId || updatedPersonality.id,
+            personalityName: updatedPersonality.name,
+            modelId: updatedModel.getModelName()
+          });
+          console.log(`[main] Notified renderer of model change to: ${updatedModel.getModelName()}`);
+        }
+      }
+    } catch (error) {
+      console.error(`[main] Failed to switch to model ${model}:`, error);
+      event.sender.send('streamError', { message: `Failed to switch to model ${model}: ${error.message}` });
+      return;
+    }
+  }
   
   if (!currentChatId || typeof currentChatId !== 'string') {
     console.log(`[main] No active chat found. Starting new chat before processing message.`);
@@ -141,6 +170,20 @@ ipcMain.on('chatMessage', async (event, data) => {
       }
       currentChatId = newChatId;
       console.log(`[main] Successfully started new chat: ${currentChatId}`);
+      
+      // Get the personality and model that was set for the new chat
+      const newChatPersonality = chatManager.getCurrentPersonalityConfig();
+      const newChatModel = chatManager.getActiveModelInstance();
+      
+      // Notify renderer of the personality and model being used
+      if (mainWindow && newChatPersonality && newChatModel) {
+        mainWindow.webContents.send('chat-personality-updated', { 
+          personalityId: newChatPersonality.id,
+          personalityName: newChatPersonality.name,
+          modelId: newChatModel.getModelName()
+        });
+        console.log(`[main] Notified renderer of new chat personality: ${newChatPersonality.name}`);
+      }
       
       // Notify renderer of deleted chat if any
       if (deletedChatId && mainWindow) {
@@ -187,7 +230,8 @@ ipcMain.on('chatMessage', async (event, data) => {
         mainWindow.webContents.send('new-chat-saved', { 
           id: currentChatIdAfterAppend, 
           title: chatStorage.generateDefaultTitle(currentHistory), 
-          lastUpdated: Date.now() 
+          lastUpdated: Date.now(),
+          personalityId: currentPersonality?.id // Make optional with optional chaining
         });
       }
       
@@ -541,6 +585,10 @@ ipcMain.on('show-native-notification', (event, data) => {
   }
 });
 
+ipcMain.on('open-external-url', (event, url) => {
+  console.log(`[Main] Opening external URL: ${url}`);
+  require('electron').shell.openExternal(url);
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

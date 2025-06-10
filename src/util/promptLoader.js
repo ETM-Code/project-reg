@@ -24,18 +24,35 @@ function loadPromptById(promptId) {
 
     console.log(`[promptLoader] Attempting to load prompt from: ${absolutePromptPath}`);
 
+    let promptContent = '';
     // Use asynchronous readFile for better practice, though sync is often okay in main process init
     // Sticking with sync for now to minimize changes, but consider async later.
     if (fs.existsSync(absolutePromptPath)) {
-      return fs.readFileSync(absolutePromptPath, 'utf-8');
+      promptContent = fs.readFileSync(absolutePromptPath, 'utf-8');
     } else {
       console.warn(`[promptLoader] Prompt file not found at path: ${absolutePromptPath} for ID: ${promptId}`);
       return '';
     }
+
+    // Universal instructions (if any) from config.json
+    let universalInstructions = '';
+    try {
+      const universalData = settingsManager.getUniversalInstructions();
+      if (universalData && universalData.markdown) {
+        universalInstructions = universalData.markdown;
+        console.log('[promptLoader] Universal markdown instructions loaded and will be appended');
+      }
+    } catch (error) {
+      console.warn('[promptLoader] Failed to load universal instructions:', error);
+      // Continue without universal instructions
+    }
+
+    console.log(`[promptLoader] Loaded prompt content: ${promptContent.length} characters`);
+    return promptContent.trim() + universalInstructions;
   } catch (error) {
     console.error(`[promptLoader] Error loading prompt for ID ${promptId}:`, error);
     return ''; // Return empty string on error
   }
 }
 
-module.exports = { loadPromptById }; // Export the new function name
+module.exports = { loadPromptById };

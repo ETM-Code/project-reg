@@ -13,7 +13,7 @@ class OpenAIReasoningChat extends AIModelInterface {
   /** @type {OpenAI} */
   client;
   /** @type {string} */
-  modelId; // Changed from modelName
+  modelName; // Changed from modelId
   /** @type {object} */
   modelConfig; // Store the full model config
   /** @type {import('../config/settingsManager').Personality} */
@@ -25,19 +25,22 @@ class OpenAIReasoningChat extends AIModelInterface {
    * @returns {boolean} True if initialization is successful, false otherwise.
    */
   initialize(config) {
-    const apiKey = settingsManager.getApiKey('openai'); // Get API key via settingsManager
+    // Check for required API key
+    const apiKey = settingsManager.getApiKey('openai') || process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      console.error("OpenAI API key not found in settings. Cannot initialize OpenAIReasoningChat.");
+      console.warn("[OpenAIReasoningChat] OpenAI API key not found. Set OPENAI_API_KEY in environment or settings.");
       return false; // Indicate failure
     }
     if (!config.modelId || !config.modelConfig || !config.personality) {
         throw new Error("modelId, modelConfig, and personality are required for OpenAIReasoningChat initialization.");
     }
     this.client = new OpenAI({ apiKey: apiKey });
-    this.modelId = config.modelId;
+    
+    // Convert modelId to modelName (the actual model name for the API)
+    this.modelName = config.modelConfig.name || config.modelId;
     this.modelConfig = config.modelConfig;
     this.personality = config.personality;
-    console.log(`[OpenAIReasoningChat] Initialized with model ID: ${this.modelId}`);
+    console.log(`[OpenAIReasoningChat] Initialized with model name: ${this.modelName}`);
     return true; // Indicate success
   }
 
@@ -56,83 +59,60 @@ class OpenAIReasoningChat extends AIModelInterface {
       throw new Error("OpenAI client not initialized. Call initialize() first.");
     }
 
-    // --- Format Input (Placeholder - Needs proper history transformation) ---
-    // TODO: Implement proper history transformation based on OpenAI Responses API requirements
-    // This likely involves iterating through `history` and creating the correct input structure.
-    // For now, using a simplified approach assuming the last message is the primary input.
-    const lastUserMessage = history.length > 0 ? history[history.length - 1].parts[0].text : (message || '');
-    const formattedInput = [{ type: 'text', text: lastUserMessage }];
-
-    // --- Prepare API Parameters ---
-    const apiParams = {
-      model: this.modelId, // Use modelId
-      input: formattedInput,
-      // Use default reasoning params from config, fallback to medium
-      reasoning: this.modelConfig.defaultParams?.reasoning || { effort: "medium" },
-      // Pass reasoning context if provided by ChatManager
-      ...(options.reasoning && { reasoning: options.reasoning }),
-    };
-
-    if (options.max_output_tokens) {
-        apiParams.max_output_tokens = options.max_output_tokens;
+    // --- Format messages for OpenAI Chat Completions API ---
+    // Reasoning models (o1-mini, o3-mini) use the standard chat completions API
+    // but with specific parameter restrictions and message formatting
+    const messages = [];
+    
+    for (const historyItem of history) {
+      if (historyItem.role === 'user') {
+        messages.push({
+          role: 'user',
+          content: historyItem.parts?.[0]?.text || historyItem.content || ''
+        });
+      } else if (historyItem.role === 'model' || historyItem.role === 'assistant') {
+        messages.push({
+          role: 'assistant',
+          content: historyItem.parts?.[0]?.text || historyItem.content || ''
+        });
+      } else if (historyItem.role === 'system') {
+        // For reasoning models, system messages should be converted to developer messages
+        // but for compatibility, we'll include them as system messages
+        messages.push({
+          role: 'system',
+          content: historyItem.parts?.[0]?.text || historyItem.content || ''
+        });
+      }
     }
-    // Add other options if needed (e.g., reasoning summary, encryption)
+
+    // Add the current message
+    messages.push({
+      role: 'user',
+      content: message
+    });
+
+    console.log(`[OpenAIReasoningChat] Formatted ${messages.length} messages for reasoning API`);
 
     try {
-      console.log(`Calling OpenAI Responses API with model: ${this.modelId}`);
-      const response = await this.client.responses.create(apiParams);
-      // console.log("OpenAI Responses API raw response:", response); // Optional: Keep for debugging if needed
+      // Reasoning models only support specific parameters
+      const apiParams = {
+        model: this.modelName,
+        messages: messages,
+        stream: true,
+        max_completion_tokens: options.maxTokens || this.maxTokens || 4000
+      };
 
-      // --- Process Response ---
-      // Extract output text (assuming structure, adjust if needed)
-      const outputText = response.output && response.output.length > 0 && response.output[0].type === 'text'
-        ? response.output[0].text
-        : '';
-
-      // Check for incomplete response
-      const isIncomplete = response.status === "incomplete";
-      const incompleteReason = isIncomplete ? response.incomplete_details?.reason : null;
-
-      // Reasoning context is now managed by ChatManager based on rawResponse.reasoning
-      // No need to store it locally in this class anymore.
-
-      // Track token usage using the updated function
-      if (response.usage) {
-        const inputTokens = response.usage.input_tokens || 0;
-        const outputTokens = response.usage.output_tokens || 0;
-        // Extract reasoning tokens specifically
-        const reasoningTokens = response.usage.output_tokens_details?.reasoning_tokens || 0;
-
-        updateTodaysUsage(
-          inputTokens,
-          outputTokens,
-          reasoningTokens // Pass reasoning tokens
-        );
-        console.log(`[OpenAIReasoningChat] Tokens - Input: ${inputTokens}, Output: ${outputTokens}, Reasoning: ${reasoningTokens}`);
+      // Add reasoning effort if specified (only for supported models)
+      if (options.reasoningEffort) {
+        apiParams.reasoning_effort = options.reasoningEffort;
       }
 
-      // Adapt response to SendMessageResult structure
-      // Since it's not a stream, we put the processed data directly.
-      // The 'stream' property will hold the result object.
-      const result = {
-        outputText: outputText,
-        isComplete: !isIncomplete,
-        incompleteReason: incompleteReason,
-        usage: response.usage,
-        // Include raw response or other details if needed by ChatManager
-        rawResponse: response
-      };
+      const stream = await this.client.chat.completions.create(apiParams);
 
-      // The interface expects 'stream' to be an AsyncGenerator or object.
-      // We return the complete result object here.
-      return {
-          stream: result,
-          // No separate response promise needed as the call is synchronous
-      };
-
+      return stream;
     } catch (error) {
-      console.error("Error calling OpenAI Responses API:", error);
-      throw new Error(`OpenAI API request failed: ${error.message}`);
+      console.error("[OpenAIReasoningChat] Error creating reasoning stream:", error);
+      throw error;
     }
   }
 
@@ -151,10 +131,10 @@ class OpenAIReasoningChat extends AIModelInterface {
    * @returns {string}
    */
   getModelName() { // Match interface
-    if (!this.modelId) {
+    if (!this.modelName) {
         throw new Error("Model ID not set. Call initialize() first.");
     }
-    return this.modelId;
+    return this.modelName;
   }
 
    /**

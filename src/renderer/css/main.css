@@ -355,3 +355,523 @@ body {
 .personality-icon:hover {
     @apply border-blue-300 dark:border-blue-500 transition-colors;
 }
+
+/* ======================================== */
+/* Sidebar Toggle Functionality            */
+/* ======================================== */
+
+.sidebar {
+  transition: margin-left 0.3s ease-in-out, width 0.3s ease-in-out;
+  width: 16rem; /* w-64 = 16rem */
+}
+
+.sidebar.hidden {
+  margin-left: -16rem; /* Hide the sidebar by moving it off-screen */
+  width: 0;
+}
+
+.main-content {
+  transition: margin-left 0.3s ease-in-out;
+  margin-left: 0;
+}
+
+.main-content.sidebar-hidden {
+  margin-left: 0; /* When sidebar is hidden, main content starts from left edge */
+}
+
+.chat-area {
+  transition: width 0.3s ease-in-out;
+}
+
+/* Ensure smooth transitions for all layout changes */
+.layout-transition {
+  transition: all 0.3s ease-in-out;
+}
+
+/* ======================================== */
+/* Enhanced Markdown Styling for Chat      */
+/* ======================================== */
+
+/* Chat bubble general styling - Updated selectors with multiple targeting approaches */
+.flex[class*="justify-start"] > div[style*="background-color"],
+.flex[class*="justify-end"] > div[style*="background-color"],
+.flex[class*="justify-start"] > .w-fit,
+.flex[class*="justify-end"] > .w-fit,
+#chatWindow .flex > div[style*="background-color"],
+#chatWindow .flex > .w-fit {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Headings in chat bubbles - Multiple selector approaches for reliability */
+.flex[class*="justify-start"] > div[style*="background-color"] h1,
+.flex[class*="justify-end"] > div[style*="background-color"] h1,
+.flex[class*="justify-start"] > .w-fit h1,
+.flex[class*="justify-end"] > .w-fit h1,
+#chatWindow .flex > div[style*="background-color"] h1,
+#chatWindow .flex > .w-fit h1,
+.flex[class*="justify-start"] > div[style*="background-color"] h2,
+.flex[class*="justify-end"] > div[style*="background-color"] h2,
+.flex[class*="justify-start"] > .w-fit h2,
+.flex[class*="justify-end"] > .w-fit h2,
+#chatWindow .flex > div[style*="background-color"] h2,
+#chatWindow .flex > .w-fit h2,
+.flex[class*="justify-start"] > div[style*="background-color"] h3,
+.flex[class*="justify-end"] > div[style*="background-color"] h3,
+.flex[class*="justify-start"] > .w-fit h3,
+.flex[class*="justify-end"] > .w-fit h3,
+#chatWindow .flex > div[style*="background-color"] h3,
+#chatWindow .flex > .w-fit h3,
+.flex[class*="justify-start"] > div[style*="background-color"] h4,
+.flex[class*="justify-end"] > div[style*="background-color"] h4,
+.flex[class*="justify-start"] > .w-fit h4,
+.flex[class*="justify-end"] > .w-fit h4,
+#chatWindow .flex > div[style*="background-color"] h4,
+#chatWindow .flex > .w-fit h4,
+.flex[class*="justify-start"] > div[style*="background-color"] h5,
+.flex[class*="justify-end"] > div[style*="background-color"] h5,
+.flex[class*="justify-start"] > .w-fit h5,
+.flex[class*="justify-end"] > .w-fit h5,
+#chatWindow .flex > div[style*="background-color"] h5,
+#chatWindow .flex > .w-fit h5,
+.flex[class*="justify-start"] > div[style*="background-color"] h6,
+.flex[class*="justify-end"] > div[style*="background-color"] h6,
+.flex[class*="justify-start"] > .w-fit h6,
+.flex[class*="justify-end"] > .w-fit h6,
+#chatWindow .flex > div[style*="background-color"] h6,
+#chatWindow .flex > .w-fit h6 {
+  font-weight: 600;
+  margin: 0.8em 0 0.4em 0;
+  line-height: 1.3;
+  color: inherit;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] h1,
+.flex[class*="justify-end"] > div[style*="background-color"] h1,
+.flex[class*="justify-start"] > .w-fit h1,
+.flex[class*="justify-end"] > .w-fit h1,
+#chatWindow .flex > div[style*="background-color"] h1,
+#chatWindow .flex > .w-fit h1 {
+  font-size: 1.5em;
+  border-bottom: 2px solid var(--accent-color);
+  padding-bottom: 0.2em;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] h2,
+.flex[class*="justify-end"] > div[style*="background-color"] h2,
+.flex[class*="justify-start"] > .w-fit h2,
+.flex[class*="justify-end"] > .w-fit h2,
+#chatWindow .flex > div[style*="background-color"] h2,
+#chatWindow .flex > .w-fit h2 {
+  font-size: 1.3em;
+  border-bottom: 1px solid var(--border-color-soft);
+  padding-bottom: 0.2em;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] h3,
+.flex[class*="justify-end"] > div[style*="background-color"] h3,
+.flex[class*="justify-start"] > .w-fit h3,
+.flex[class*="justify-end"] > .w-fit h3,
+#chatWindow .flex > div[style*="background-color"] h3,
+#chatWindow .flex > .w-fit h3 {
+  font-size: 1.2em;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] h4,
+.flex[class*="justify-end"] > div[style*="background-color"] h4,
+.flex[class*="justify-start"] > .w-fit h4,
+.flex[class*="justify-end"] > .w-fit h4,
+#chatWindow .flex > div[style*="background-color"] h4,
+#chatWindow .flex > .w-fit h4 {
+  font-size: 1.1em;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] h5,
+.flex[class*="justify-end"] > div[style*="background-color"] h5,
+.flex[class*="justify-start"] > .w-fit h5,
+.flex[class*="justify-end"] > .w-fit h5,
+#chatWindow .flex > div[style*="background-color"] h5,
+#chatWindow .flex > .w-fit h5 {
+  font-size: 1.05em;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] h6,
+.flex[class*="justify-end"] > div[style*="background-color"] h6,
+.flex[class*="justify-start"] > .w-fit h6,
+.flex[class*="justify-end"] > .w-fit h6,
+#chatWindow .flex > div[style*="background-color"] h6,
+#chatWindow .flex > .w-fit h6 {
+  font-size: 1em;
+  font-weight: 700;
+}
+
+/* Paragraphs in chat bubbles */
+.flex[class*="justify-start"] > div[style*="background-color"] p,
+.flex[class*="justify-end"] > div[style*="background-color"] p,
+.flex[class*="justify-start"] > .w-fit p,
+.flex[class*="justify-end"] > .w-fit p,
+#chatWindow .flex > div[style*="background-color"] p,
+#chatWindow .flex > .w-fit p {
+  margin: 0.6em 0;
+  line-height: 1.6;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] p:first-child,
+.flex[class*="justify-end"] > div[style*="background-color"] p:first-child,
+.flex[class*="justify-start"] > .w-fit p:first-child,
+.flex[class*="justify-end"] > .w-fit p:first-child,
+#chatWindow .flex > div[style*="background-color"] p:first-child,
+#chatWindow .flex > .w-fit p:first-child {
+  margin-top: 0;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] p:last-child,
+.flex[class*="justify-end"] > div[style*="background-color"] p:last-child,
+.flex[class*="justify-start"] > .w-fit p:last-child,
+.flex[class*="justify-end"] > .w-fit p:last-child,
+#chatWindow .flex > div[style*="background-color"] p:last-child,
+#chatWindow .flex > .w-fit p:last-child {
+  margin-bottom: 0;
+}
+
+/* Lists in chat bubbles */
+.flex[class*="justify-start"] > div[style*="background-color"] ul,
+.flex[class*="justify-end"] > div[style*="background-color"] ul,
+.flex[class*="justify-start"] > div[style*="background-color"] ol,
+.flex[class*="justify-end"] > div[style*="background-color"] ol,
+.flex[class*="justify-start"] > .w-fit ul,
+.flex[class*="justify-end"] > .w-fit ul,
+.flex[class*="justify-start"] > .w-fit ol,
+.flex[class*="justify-end"] > .w-fit ol,
+#chatWindow .flex > div[style*="background-color"] ul,
+#chatWindow .flex > div[style*="background-color"] ol,
+#chatWindow .flex > .w-fit ul,
+#chatWindow .flex > .w-fit ol {
+  margin: 0.8em 0;
+  padding-left: 1.5em;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] ul,
+.flex[class*="justify-end"] > div[style*="background-color"] ul,
+.flex[class*="justify-start"] > .w-fit ul,
+.flex[class*="justify-end"] > .w-fit ul,
+#chatWindow .flex > div[style*="background-color"] ul,
+#chatWindow .flex > .w-fit ul {
+  list-style-type: disc;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] ol,
+.flex[class*="justify-end"] > div[style*="background-color"] ol,
+.flex[class*="justify-start"] > .w-fit ol,
+.flex[class*="justify-end"] > .w-fit ol,
+#chatWindow .flex > div[style*="background-color"] ol,
+#chatWindow .flex > .w-fit ol {
+  list-style-type: decimal;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] li,
+.flex[class*="justify-end"] > div[style*="background-color"] li,
+.flex[class*="justify-start"] > .w-fit li,
+.flex[class*="justify-end"] > .w-fit li,
+#chatWindow .flex > div[style*="background-color"] li,
+#chatWindow .flex > .w-fit li {
+  margin: 0.3em 0;
+  line-height: 1.5;
+}
+
+/* Nested lists */
+.flex[class*="justify-start"] > div[style*="background-color"] ul ul,
+.flex[class*="justify-end"] > div[style*="background-color"] ul ul,
+.flex[class*="justify-start"] > div[style*="background-color"] ol ol,
+.flex[class*="justify-end"] > div[style*="background-color"] ol ol,
+.flex[class*="justify-start"] > div[style*="background-color"] ul ol,
+.flex[class*="justify-end"] > div[style*="background-color"] ul ol,
+.flex[class*="justify-start"] > div[style*="background-color"] ol ul,
+.flex[class*="justify-end"] > div[style*="background-color"] ol ul,
+.flex[class*="justify-start"] > .w-fit ul ul,
+.flex[class*="justify-end"] > .w-fit ul ul,
+.flex[class*="justify-start"] > .w-fit ol ol,
+.flex[class*="justify-end"] > .w-fit ol ol,
+.flex[class*="justify-start"] > .w-fit ul ol,
+.flex[class*="justify-end"] > .w-fit ul ol,
+.flex[class*="justify-start"] > .w-fit ol ul,
+.flex[class*="justify-end"] > .w-fit ol ul,
+#chatWindow .flex > div[style*="background-color"] ul ul,
+#chatWindow .flex > div[style*="background-color"] ol ol,
+#chatWindow .flex > div[style*="background-color"] ul ol,
+#chatWindow .flex > div[style*="background-color"] ol ul,
+#chatWindow .flex > .w-fit ul ul,
+#chatWindow .flex > .w-fit ol ol,
+#chatWindow .flex > .w-fit ul ol,
+#chatWindow .flex > .w-fit ol ul {
+  margin: 0.2em 0;
+}
+
+/* Blockquotes in chat bubbles */
+.flex[class*="justify-start"] > div[style*="background-color"] blockquote,
+.flex[class*="justify-end"] > div[style*="background-color"] blockquote,
+.flex[class*="justify-start"] > .w-fit blockquote,
+.flex[class*="justify-end"] > .w-fit blockquote,
+#chatWindow .flex > div[style*="background-color"] blockquote,
+#chatWindow .flex > .w-fit blockquote {
+  margin: 1em 0;
+  padding: 0.8em 1.2em;
+  border-left: 4px solid var(--accent-color);
+  background-color: var(--background-color);
+  border-radius: 0 6px 6px 0;
+  font-style: italic;
+  opacity: 0.9;
+}
+
+/* Code styling in chat bubbles */
+.flex[class*="justify-start"] > div[style*="background-color"] code,
+.flex[class*="justify-end"] > div[style*="background-color"] code,
+.flex[class*="justify-start"] > .w-fit code,
+.flex[class*="justify-end"] > .w-fit code,
+#chatWindow .flex > div[style*="background-color"] code,
+#chatWindow .flex > .w-fit code {
+  background-color: var(--background-color);
+  color: var(--accent-color);
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9em;
+  border: 1px solid var(--border-color-soft);
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] pre,
+.flex[class*="justify-end"] > div[style*="background-color"] pre,
+.flex[class*="justify-start"] > .w-fit pre,
+.flex[class*="justify-end"] > .w-fit pre,
+#chatWindow .flex > div[style*="background-color"] pre,
+#chatWindow .flex > .w-fit pre {
+  background-color: var(--content-bg-color);
+  border: 1px solid var(--border-color-soft);
+  border-radius: 6px;
+  padding: 1em;
+  margin: 0.8em 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] pre code,
+.flex[class*="justify-end"] > div[style*="background-color"] pre code,
+.flex[class*="justify-start"] > .w-fit pre code,
+.flex[class*="justify-end"] > .w-fit pre code,
+#chatWindow .flex > div[style*="background-color"] pre code,
+#chatWindow .flex > .w-fit pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.9em;
+  color: inherit;
+}
+
+/* Links in chat bubbles */
+.flex[class*="justify-start"] > div[style*="background-color"] a,
+.flex[class*="justify-end"] > div[style*="background-color"] a,
+.flex[class*="justify-start"] > .w-fit a,
+.flex[class*="justify-end"] > .w-fit a,
+#chatWindow .flex > div[style*="background-color"] a,
+#chatWindow .flex > .w-fit a {
+  color: var(--accent-color);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] a:hover,
+.flex[class*="justify-end"] > div[style*="background-color"] a:hover,
+.flex[class*="justify-start"] > .w-fit a:hover,
+.flex[class*="justify-end"] > .w-fit a:hover,
+#chatWindow .flex > div[style*="background-color"] a:hover,
+#chatWindow .flex > .w-fit a:hover {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+/* Bold and emphasis in chat bubbles */
+.flex[class*="justify-start"] > div[style*="background-color"] strong,
+.flex[class*="justify-end"] > div[style*="background-color"] strong,
+.flex[class*="justify-start"] > div[style*="background-color"] b,
+.flex[class*="justify-end"] > div[style*="background-color"] b,
+.flex[class*="justify-start"] > .w-fit strong,
+.flex[class*="justify-end"] > .w-fit strong,
+.flex[class*="justify-start"] > .w-fit b,
+.flex[class*="justify-end"] > .w-fit b,
+#chatWindow .flex > div[style*="background-color"] strong,
+#chatWindow .flex > div[style*="background-color"] b,
+#chatWindow .flex > .w-fit strong,
+#chatWindow .flex > .w-fit b {
+  font-weight: 700;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] em,
+.flex[class*="justify-end"] > div[style*="background-color"] em,
+.flex[class*="justify-start"] > div[style*="background-color"] i,
+.flex[class*="justify-end"] > div[style*="background-color"] i,
+.flex[class*="justify-start"] > .w-fit em,
+.flex[class*="justify-end"] > .w-fit em,
+.flex[class*="justify-start"] > .w-fit i,
+.flex[class*="justify-end"] > .w-fit i,
+#chatWindow .flex > div[style*="background-color"] em,
+#chatWindow .flex > div[style*="background-color"] i,
+#chatWindow .flex > .w-fit em,
+#chatWindow .flex > .w-fit i {
+  font-style: italic;
+}
+
+/* Horizontal rules in chat bubbles */
+.flex[class*="justify-start"] > div[style*="background-color"] hr,
+.flex[class*="justify-end"] > div[style*="background-color"] hr,
+.flex[class*="justify-start"] > .w-fit hr,
+.flex[class*="justify-end"] > .w-fit hr,
+#chatWindow .flex > div[style*="background-color"] hr,
+#chatWindow .flex > .w-fit hr {
+  border: none;
+  height: 2px;
+  background: linear-gradient(to right, transparent, var(--border-color-soft), transparent);
+  margin: 1.5em 0;
+}
+
+/* Tables in chat bubbles */
+.flex[class*="justify-start"] > div[style*="background-color"] table,
+.flex[class*="justify-end"] > div[style*="background-color"] table,
+.flex[class*="justify-start"] > .w-fit table,
+.flex[class*="justify-end"] > .w-fit table,
+#chatWindow .flex > div[style*="background-color"] table,
+#chatWindow .flex > .w-fit table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-color-soft);
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] th,
+.flex[class*="justify-end"] > div[style*="background-color"] th,
+.flex[class*="justify-start"] > div[style*="background-color"] td,
+.flex[class*="justify-end"] > div[style*="background-color"] td,
+.flex[class*="justify-start"] > .w-fit th,
+.flex[class*="justify-end"] > .w-fit th,
+.flex[class*="justify-start"] > .w-fit td,
+.flex[class*="justify-end"] > .w-fit td,
+#chatWindow .flex > div[style*="background-color"] th,
+#chatWindow .flex > div[style*="background-color"] td,
+#chatWindow .flex > .w-fit th,
+#chatWindow .flex > .w-fit td {
+  border: 1px solid var(--border-color-soft);
+  padding: 0.8em 1em;
+  text-align: left;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] th,
+.flex[class*="justify-end"] > div[style*="background-color"] th,
+.flex[class*="justify-start"] > .w-fit th,
+.flex[class*="justify-end"] > .w-fit th,
+#chatWindow .flex > div[style*="background-color"] th,
+#chatWindow .flex > .w-fit th {
+  background-color: var(--accent-color);
+  color: white;
+  font-weight: 600;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] tr:nth-child(even),
+.flex[class*="justify-end"] > div[style*="background-color"] tr:nth-child(even),
+.flex[class*="justify-start"] > .w-fit tr:nth-child(even),
+.flex[class*="justify-end"] > .w-fit tr:nth-child(even),
+#chatWindow .flex > div[style*="background-color"] tr:nth-child(even),
+#chatWindow .flex > .w-fit tr:nth-child(even) {
+  background-color: var(--background-color);
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] tr:hover,
+.flex[class*="justify-end"] > div[style*="background-color"] tr:hover,
+.flex[class*="justify-start"] > .w-fit tr:hover,
+.flex[class*="justify-end"] > .w-fit tr:hover,
+#chatWindow .flex > div[style*="background-color"] tr:hover,
+#chatWindow .flex > .w-fit tr:hover {
+  background-color: var(--content-bg-color);
+}
+
+/* Dark theme adjustments */
+.theme-dark .flex[class*="justify-start"] > div[style*="background-color"] code,
+.theme-dark .flex[class*="justify-end"] > div[style*="background-color"] code,
+.theme-dark .flex[class*="justify-start"] > .w-fit code,
+.theme-dark .flex[class*="justify-end"] > .w-fit code,
+.theme-dark #chatWindow .flex > div[style*="background-color"] code,
+.theme-dark #chatWindow .flex > .w-fit code {
+  background-color: rgba(0, 0, 0, 0.3);
+  color: var(--accent-color);
+}
+
+.theme-dark .flex[class*="justify-start"] > div[style*="background-color"] pre,
+.theme-dark .flex[class*="justify-end"] > div[style*="background-color"] pre,
+.theme-dark .flex[class*="justify-start"] > .w-fit pre,
+.theme-dark .flex[class*="justify-end"] > .w-fit pre,
+.theme-dark #chatWindow .flex > div[style*="background-color"] pre,
+.theme-dark #chatWindow .flex > .w-fit pre {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+.theme-dark .flex[class*="justify-start"] > div[style*="background-color"] blockquote,
+.theme-dark .flex[class*="justify-end"] > div[style*="background-color"] blockquote,
+.theme-dark .flex[class*="justify-start"] > .w-fit blockquote,
+.theme-dark .flex[class*="justify-end"] > .w-fit blockquote,
+.theme-dark #chatWindow .flex > div[style*="background-color"] blockquote,
+.theme-dark #chatWindow .flex > .w-fit blockquote {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.theme-dark .flex[class*="justify-start"] > div[style*="background-color"] tr:nth-child(even),
+.theme-dark .flex[class*="justify-end"] > div[style*="background-color"] tr:nth-child(even),
+.theme-dark .flex[class*="justify-start"] > .w-fit tr:nth-child(even),
+.theme-dark .flex[class*="justify-end"] > .w-fit tr:nth-child(even),
+.theme-dark #chatWindow .flex > div[style*="background-color"] tr:nth-child(even),
+.theme-dark #chatWindow .flex > .w-fit tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.theme-dark .flex[class*="justify-start"] > div[style*="background-color"] tr:hover,
+.theme-dark .flex[class*="justify-end"] > div[style*="background-color"] tr:hover,
+.theme-dark .flex[class*="justify-start"] > .w-fit tr:hover,
+.theme-dark .flex[class*="justify-end"] > .w-fit tr:hover,
+.theme-dark #chatWindow .flex > div[style*="background-color"] tr:hover,
+.theme-dark #chatWindow .flex > .w-fit tr:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* LaTeX/MathJax styling in chat bubbles */
+.flex[class*="justify-start"] > div[style*="background-color"] .MathJax,
+.flex[class*="justify-end"] > div[style*="background-color"] .MathJax,
+.flex[class*="justify-start"] > .w-fit .MathJax,
+.flex[class*="justify-end"] > .w-fit .MathJax,
+#chatWindow .flex > div[style*="background-color"] .MathJax,
+#chatWindow .flex > .w-fit .MathJax {
+  font-size: 1em !important;
+  color: inherit !important;
+}
+
+.flex[class*="justify-start"] > div[style*="background-color"] mjx-container[display="true"],
+.flex[class*="justify-end"] > div[style*="background-color"] mjx-container[display="true"],
+.flex[class*="justify-start"] > .w-fit mjx-container[display="true"],
+.flex[class*="justify-end"] > .w-fit mjx-container[display="true"],
+#chatWindow .flex > div[style*="background-color"] mjx-container[display="true"],
+#chatWindow .flex > .w-fit mjx-container[display="true"] {
+  margin: 1em 0;
+  padding: 0.5em;
+  background-color: var(--background-color);
+  border-radius: 4px;
+  border: 1px solid var(--border-color-soft);
+}
+
+.theme-dark .flex[class*="justify-start"] > div[style*="background-color"] mjx-container[display="true"],
+.theme-dark .flex[class*="justify-end"] > div[style*="background-color"] mjx-container[display="true"],
+.theme-dark .flex[class*="justify-start"] > .w-fit mjx-container[display="true"],
+.theme-dark .flex[class*="justify-end"] > .w-fit mjx-container[display="true"],
+.theme-dark #chatWindow .flex > div[style*="background-color"] mjx-container[display="true"],
+.theme-dark #chatWindow .flex > .w-fit mjx-container[display="true"] {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+/* ======================================== */

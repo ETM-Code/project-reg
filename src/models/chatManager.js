@@ -163,6 +163,82 @@ async function setCurrentChatPersonality(personalityId) {
   }
 }
 
+/**
+ * Sets the model for the *current chat session only* by temporarily changing the personality.
+ * Does not change the default saved in settings.
+ * @param {string} modelId - The ID of the model to activate for the current session.
+ * @throws {Error} If model config is not found or model initialization fails.
+ */
+async function setCurrentChatModel(modelId) {
+  console.log(`[ChatManager] Setting current chat session model to: ${modelId}`);
+  
+  // Get the model configuration
+  const modelConfig = settingsManager.getModelById(modelId);
+  if (!modelConfig) {
+    throw new Error(`[ChatManager] Model configuration not found for ID: ${modelId}`);
+  }
+  
+  // Create a temporary personality config that uses this model
+  const currentPersonality = currentPersonalityConfig || settingsManager.getPersonalityById(settingsManager.getDefaults().personalityId);
+  if (!currentPersonality) {
+    throw new Error(`[ChatManager] No current personality available to override model for`);
+  }
+  
+  // Create a temporary personality with the new model
+  const tempPersonalityConfig = {
+    ...currentPersonality,
+    modelId: modelId,
+    // Keep original ID but mark as temporary
+    originalPersonalityId: currentPersonality.id
+  };
+  
+  // Save current personality reference
+  currentPersonalityConfig = tempPersonalityConfig;
+  
+  try {
+    // Initialize the new model instance
+    const implementationType = modelConfig.implementation;
+    console.log(`[ChatManager] Switching to implementation: ${implementationType}, Model ID: ${modelId}`);
+
+    // Instantiate the correct model class based on implementation type
+    if (implementationType === 'gpt') {
+      activeModelInstance = new GPTChat();
+    } else if (implementationType === 'gemini') {
+      activeModelInstance = new GeminiChat();
+    } else if (implementationType === 'openai-reasoning') {
+      activeModelInstance = new OpenAIReasoningChat();
+    } else {
+      throw new Error(`[ChatManager] Unsupported model implementation type: ${implementationType}`);
+    }
+
+    // Initialize with the new model config
+    const modelInitConfig = {
+      modelId: modelId,
+      modelConfig: modelConfig,
+      personality: tempPersonalityConfig,
+    };
+
+    const initializationSuccess = activeModelInstance.initialize(modelInitConfig);
+
+    if (initializationSuccess) {
+      console.log(`[ChatManager] Successfully switched to model ${modelId} (${implementationType}) for current chat session`);
+    } else {
+      throw new Error(`[ChatManager] Failed to initialize model ${modelId}`);
+    }
+  } catch (error) {
+    console.error(`[ChatManager] Failed to switch current chat model to ${modelId}:`, error);
+    // Reset to previous state on failure
+    if (currentPersonality.originalPersonalityId) {
+      try {
+        await setActivePersonality(currentPersonality.originalPersonalityId);
+      } catch (resetError) {
+        console.error(`[ChatManager] Failed to reset to original personality after model switch failure:`, resetError);
+      }
+    }
+    throw error;
+  }
+}
+
 // --- Core Chat Interaction ---
 
 /**
@@ -388,6 +464,9 @@ async function startNewChat() {
   const previousChatId = currentChatId;
   const previousHistory = [...conversationHistory]; // Copy of the history of the chat we are leaving
 
+  // Store current session personality before clearing state
+  const currentSessionPersonalityId = currentPersonalityConfig?.id;
+
   // Calculate time since last message of previous chat
   pendingTimeSinceLastChatInfo = null; // Reset before calculation
   if (previousChatId && previousHistory.length > 0) {
@@ -433,23 +512,29 @@ async function startNewChat() {
   // conversationHistory.lastMessageTime is implicitly reset as conversationHistory is a new array
 
   try {
-    // Initialize with the default personality from settings
-    const defaultPersonalityId = settingsManager.getDefaults().personalityId;
-    if (!defaultPersonalityId) {
-      console.error("[ChatManager] Default personality ID not found in settings.");
-      const personalities = settingsManager.getPersonalities();
-      if (personalities.length > 0) {
-          await setActivePersonality(personalities[0].id);
-      } else {
-          throw new Error("No default or available personalities found in configuration.");
+    // Preserve current session personality if available, otherwise use default
+    let personalityIdToUse = currentSessionPersonalityId;
+    
+    if (!personalityIdToUse) {
+      personalityIdToUse = settingsManager.getDefaults().personalityId;
+      if (!personalityIdToUse) {
+        console.error("[ChatManager] No session or default personality ID found.");
+        const personalities = settingsManager.getPersonalities();
+        if (personalities.length > 0) {
+            personalityIdToUse = personalities[0].id;
+        } else {
+            throw new Error("No session, default, or available personalities found in configuration.");
+        }
       }
-    } else {
-        await setActivePersonality(defaultPersonalityId);
     }
+    
+    console.log(`[ChatManager] Starting new chat with personality: ${personalityIdToUse} (preserved from session: ${!!currentSessionPersonalityId})`);
+    await setActivePersonality(personalityIdToUse);
+    
     console.log(`[ChatManager] Started new chat ${currentChatId} with personality ${currentPersonalityConfig?.id}`);
     return { newChatId: currentChatId, deletedChatId: deletedChatId };
   } catch (error) {
-      console.error("[ChatManager] Failed to initialize default personality for new chat:", error);
+      console.error("[ChatManager] Failed to initialize personality for new chat:", error);
       return { newChatId: currentChatId, deletedChatId: deletedChatId, error: error.message };
   }
 }
@@ -808,6 +893,7 @@ module.exports = {
   checkAndDeleteEmptyChat, // Keep helper exported if needed by IPC layer
   setCurrentChatPersonality, // Export the new function
   executeToolAndAppendResponse, // Export the new helper
-  setDefaultPersonality // Export the new function
+  setDefaultPersonality, // Export the new function
+  setCurrentChatModel // Export the new function
   // REMOVED: toolDeclarations export
 };

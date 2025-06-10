@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Function to render messages (simplified, might need adjustment based on app.js)
   // NOTE: This duplicates logic from app.js's appendMessage/createBubble.
   // Ideally, this rendering logic should be shared/refactored.
-  function renderMessage(sender, text, index, messageId, chatId) { // Add chatId parameter
+  function renderMessage(sender, text, index, messageId, chatId, personalityId = null) { // Add personalityId parameter
      const bubble = document.createElement('div');
      const container = document.createElement('div');
      // Ensure container has relative and group for absolute positioning and hover effect of button
@@ -37,55 +37,152 @@ document.addEventListener('DOMContentLoaded', () => {
      bubble.style.color = bubbleTextVar; // Apply specific text color
 
     // --- Strip Metadata ---
-    // Corrected Regex to match the 24-hour format observed (e.g., "Date: 18/4/2025 | Time: 13:37:06 | Since last msg: 0s\n")
-    const metadataRegex = /^Date: \d{1,2}\/\d{1,2}\/\d{4} \| Time: \d{1,2}:\d{2}:\d{2} \| Since last msg: \d+s\n/;
-    const cleanText = text.replace(metadataRegex, '');
+    // Enhanced regex to match various metadata formats and handle edge cases
+    const metadataRegex = /^(Date: \d{1,2}\/\d{1,2}\/\d{4} \| Time: \d{1,2}:\d{2}:\d{2} \| Since last msg: \d+s\n)|(\(System: [^\)]+\)\n)/;
+    let cleanText = text.replace(metadataRegex, '');
+    
+    // Remove any additional leading/trailing whitespace that might cause blank lines
+    cleanText = cleanText.trim();
+    
+    // Handle cases where there might be multiple system messages or metadata lines
+    // Remove any remaining lines that look like system messages
+    const systemMessageRegex = /^\(System: [^\)]+\)\n/gm;
+    cleanText = cleanText.replace(systemMessageRegex, '');
+    
+    // Final trim to ensure no leading/trailing whitespace
+    cleanText = cleanText.trim();
     // --- End Strip Metadata ---
 
     // Use marked.parse if available globally or import/require it
     // Set innerHTML *after* potentially adding the button, using cleanText
     let bubbleContent = typeof marked !== 'undefined' ? marked.parse(cleanText) : cleanText.replace(/\n/g, '<br>');
 
+    let buttonHtml = ''; // Store button HTML for user messages
+    let personalityIconHtml = ''; // Store personality icon HTML for bot messages
+
     // Add Edit button *inside* the bubble for user messages
     if (sender === 'user' && messageId && chatId) { // Check chatId too
-      const editBtn = document.createElement('button');
-      // Keep absolute positioning, remove opacity-0, add z-10 for debugging visibility
-      editBtn.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-          <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
-        </svg>
+      buttonHtml = `
+        <button class="absolute top-1.5 left-1.5 z-10 p-1 text-[var(--user-bubble-text)]/60 hover:text-[var(--user-bubble-text)] bg-[var(--user-bubble-bg)]/50 hover:bg-[var(--user-bubble-bg)]/75 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200"
+                title="Edit message"
+                data-message-id="${messageId}"
+                data-raw-text="${escapeHtml(text)}">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+          </svg>
+        </button>
       `;
-      // Restore opacity-0 and group-hover:opacity-100 for hover effect
-      // Style edit button using variables (consistent with app.js) - use bubble text color
-      editBtn.className = 'absolute top-1.5 left-1.5 z-10 p-1 text-[var(--user-bubble-text)]/60 hover:text-[var(--user-bubble-text)] bg-[var(--user-bubble-bg)]/50 hover:bg-[var(--user-bubble-bg)]/75 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200'; // Adjust position slightly
-      editBtn.title = "Edit message"; // Add tooltip
-      editBtn.dataset.messageId = messageId; // Store ID on button
-      // Store the *original* text (with metadata) for editing, but display clean text
-      editBtn.dataset.rawText = text;
+    } else if (sender === 'bot' || sender === 'model') {
+      // Add personality icon for bot messages
+      console.log(`[ChatHistory] Bot message - personalityId param: ${personalityId}`);
+      
+      // Use the passed personalityId if available, otherwise fall back to current personality
+      if (window.getAvailablePersonalities) {
+        const personalities = window.getAvailablePersonalities();
+        console.log(`[ChatHistory] Available personalities:`, personalities.length, personalities.map(p => p.id));
+        
+        // Try to use the specific personality for this chat first
+        let targetPersonalityId = personalityId;
+        
+        // If no specific personality provided, fall back to current active personality
+        if (!targetPersonalityId && window.getCurrentActivePersonalityId) {
+          targetPersonalityId = window.getCurrentActivePersonalityId();
+          console.log(`[ChatHistory] Using current active personality: ${targetPersonalityId}`);
+        }
+        
+        // If still no personality, fall back to default
+        if (!targetPersonalityId && window.getCurrentDefaultPersonalityId) {
+          targetPersonalityId = window.getCurrentDefaultPersonalityId();
+          console.log(`[ChatHistory] Using default personality: ${targetPersonalityId}`);
+        }
+        
+        console.log(`[ChatHistory] Target personality ID: ${targetPersonalityId}`);
+        const personality = personalities.find(p => p.id === targetPersonalityId);
+        console.log(`[ChatHistory] Found personality:`, personality);
+        
+        if (personality && personality.icon) {
+          let iconSrc = personality.icon;
+          console.log(`[ChatHistory] Original icon path: ${iconSrc}`);
+          
+          // Handle different icon path formats
+          if (iconSrc.startsWith('src/renderer/')) {
+            iconSrc = iconSrc.substring('src/renderer/'.length);
+          }
+          if (!iconSrc.startsWith('./') && !iconSrc.startsWith('http') && !iconSrc.startsWith('/')) {
+            iconSrc = './' + iconSrc;
+          }
+          
+          console.log(`[ChatHistory] Final icon path: ${iconSrc}`);
+          
+          personalityIconHtml = `
+            <img src="${iconSrc}" 
+                 alt="${personality.name}" 
+                 class="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-full object-cover opacity-60 border border-[var(--bot-bubble-text)]/20"
+                 onerror="this.style.display='none'">
+          `;
+          console.log(`[ChatHistory] Generated icon HTML:`, personalityIconHtml);
+        } else {
+          console.log(`[ChatHistory] No personality found or no icon available`);
+        }
+      } else {
+        console.log(`[ChatHistory] window.getAvailablePersonalities not available`);
+      }
+    }
 
-      // Attach onclick listener directly to the element
-      editBtn.onclick = (e) => {
-           e.stopPropagation(); // Prevent potential container clicks
-           // Call the globally exposed handler from app.js
-           if (window.handleAppEditClick) {
-               // Pass chatId, messageId, rawText, and the container element
-               window.handleAppEditClick(chatId, messageId, text, container); // Pass chatId
-           } else {
-               console.error("Edit handler (window.handleAppEditClick) not found!");
-               alert("Error: Cannot initiate edit.");
-           }
-       }; // End of editBtn.onclick
-       // Set bubble content first
-       bubble.innerHTML = bubbleContent;
-       // Prepend the actual button *element* to the bubble
-       bubble.prepend(editBtn);
-     } else {
-       // If not adding button, just set the content
-       bubble.innerHTML = bubbleContent;
-     }
+    // Set bubble content with buttons/icons
+    bubble.innerHTML = buttonHtml + personalityIconHtml + bubbleContent;
+
+    // Handle external links to open in browser
+    const links = bubble.querySelectorAll('a');
+    links.forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const url = link.href;
+        if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+          window.electronAPI.sendMessage('open-external-url', url);
+        }
+      });
+    });
+
+    // Add click listener for edit button if it exists
+    if (buttonHtml) {
+      const editBtn = bubble.querySelector('button[data-message-id]');
+      if (editBtn) {
+        editBtn.onclick = (e) => {
+          e.stopPropagation(); // Prevent potential container clicks
+          // Call the globally exposed handler from app.js
+          if (window.handleAppEditClick) {
+            // Pass chatId, messageId, rawText, and the container element
+            window.handleAppEditClick(chatId, messageId, text, container); // Pass chatId
+          } else {
+            console.error("Edit handler (window.handleAppEditClick) not found!");
+            alert("Error: Cannot initiate edit.");
+          }
+        };
+      }
+    }
 
      container.appendChild(bubble); // Append bubble (which now contains button if applicable)
+     
+     // Render LaTeX with MathJax if available
+     if (window.MathJax && window.MathJax.typesetPromise) {
+       window.MathJax.typesetPromise([bubble]).catch((err) => {
+         console.warn('MathJax history render error:', err);
+       });
+     }
+     
      chatWindow.appendChild(container);
+  }
+
+  // Helper to escape HTML for data attributes
+  function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
   }
 
   // Function to load and display the list of saved chats
@@ -98,8 +195,48 @@ document.addEventListener('DOMContentLoaded', () => {
           const chatItem = document.createElement('div');
           // Use component class for chat list items
           chatItem.className = 'chat-list-item-base';
-          chatItem.textContent = chat.title || `Chat ${chat.id}`; // Use title or ID
           chatItem.dataset.chatId = chat.id; // Store chat ID
+          
+          // Create container for icon and title
+          const contentContainer = document.createElement('div');
+          contentContainer.className = 'flex items-center space-x-2';
+          
+          // Add personality icon if available
+          if (chat.personalityId) {
+            // We'll need to get personality data to show the icon
+            const personalityIcon = document.createElement('img');
+            personalityIcon.className = 'w-4 h-4 rounded-full flex-shrink-0 object-cover';
+            personalityIcon.alt = 'Personality';
+            
+            // Get personality data to find the icon
+            if (window.getAvailablePersonalities) {
+              const personalities = window.getAvailablePersonalities();
+              const personality = personalities.find(p => p.id === chat.personalityId);
+              if (personality && personality.icon) {
+                let iconSrc = personality.icon;
+                // Handle different icon path formats
+                if (iconSrc.startsWith('src/renderer/')) {
+                  iconSrc = iconSrc.substring('src/renderer/'.length);
+                }
+                if (!iconSrc.startsWith('./') && !iconSrc.startsWith('http') && !iconSrc.startsWith('/')) {
+                  iconSrc = './' + iconSrc;
+                }
+                personalityIcon.src = iconSrc;
+                personalityIcon.onerror = () => {
+                  personalityIcon.style.display = 'none';
+                };
+                contentContainer.appendChild(personalityIcon);
+              }
+            }
+          }
+          
+          // Add chat title
+          const titleSpan = document.createElement('span');
+          titleSpan.className = 'truncate flex-1';
+          titleSpan.textContent = chat.title || `Chat ${chat.id}`;
+          contentContainer.appendChild(titleSpan);
+          
+          chatItem.appendChild(contentContainer);
           chatItem.addEventListener('click', () => loadChat(chat.id));
           chatListDiv.appendChild(chatItem);
         });
@@ -130,6 +267,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const personalityName = chatData?.personalityName;
       const modelId = chatData?.modelId;
 
+      console.log(`[ChatHistory] Loaded chat data:`, {
+        personalityId,
+        personalityName,
+        modelId,
+        hasHistory: !!history,
+        historyLength: history?.length
+      });
+
       // Render the loaded history
       if (history && history.length > 0) {
          const loadedChatId = currentChatId; // Capture chatId for the closure
@@ -137,7 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Assuming history format { id: '...', role: 'user'/'model', parts: [{ text: '...' }] }
             if (message.parts && message.parts.length > 0) {
                // Pass loadedChatId to renderMessage
-               renderMessage(message.role, message.parts[0].text, index, message.id, loadedChatId);
+               renderMessage(message.role, message.parts[0].text, index, message.id, loadedChatId, personalityId);
             }
          });
          // Use the new programmatic scroll function
@@ -209,8 +354,16 @@ document.addEventListener('DOMContentLoaded', () => {
  function updateChatItemTitle(chatId, newTitle) {
    const chatItem = chatListDiv.querySelector(`div[data-chat-id="${chatId}"]`);
    if (chatItem) {
-     chatItem.textContent = newTitle;
-     console.log(`Updated title for chat ${chatId} in list to: ${newTitle}`);
+     // Find the title span within the chat item instead of replacing all content
+     const titleSpan = chatItem.querySelector('span.truncate');
+     if (titleSpan) {
+       titleSpan.textContent = newTitle;
+       console.log(`Updated title for chat ${chatId} in list to: ${newTitle}`);
+     } else {
+       // Fallback for older structure without icons
+       chatItem.textContent = newTitle;
+       console.log(`Updated title for chat ${chatId} in list to: ${newTitle} (fallback)`);
+     }
    } else {
      console.warn(`Could not find chat item with ID ${chatId} to update title.`);
    }
@@ -248,10 +401,53 @@ document.addEventListener('DOMContentLoaded', () => {
            return;
        }
        console.log(`[ChatHistory] Adding new chat item to list: ID=${chatData.id}, Title=${chatData.title}`);
+       
+       // Update currentChatId to the new chat since it's now active
+       currentChatId = chatData.id;
+       
        const chatItem = document.createElement('div');
        chatItem.className = 'chat-list-item-base'; // Use consistent styling
-       chatItem.textContent = chatData.title || `Chat ${chatData.id}`;
        chatItem.dataset.chatId = chatData.id;
+       
+       // Create container for icon and title
+       const contentContainer = document.createElement('div');
+       contentContainer.className = 'flex items-center space-x-2';
+       
+       // Add personality icon if available
+       if (chatData.personalityId) {
+         const personalityIcon = document.createElement('img');
+         personalityIcon.className = 'w-4 h-4 rounded-full flex-shrink-0 object-cover';
+         personalityIcon.alt = 'Personality';
+         
+         // Get personality data to find the icon
+         if (window.getAvailablePersonalities) {
+           const personalities = window.getAvailablePersonalities();
+           const personality = personalities.find(p => p.id === chatData.personalityId);
+           if (personality && personality.icon) {
+             let iconSrc = personality.icon;
+             // Handle different icon path formats
+             if (iconSrc.startsWith('src/renderer/')) {
+               iconSrc = iconSrc.substring('src/renderer/'.length);
+             }
+             if (!iconSrc.startsWith('./') && !iconSrc.startsWith('http') && !iconSrc.startsWith('/')) {
+               iconSrc = './' + iconSrc;
+             }
+             personalityIcon.src = iconSrc;
+             personalityIcon.onerror = () => {
+               personalityIcon.style.display = 'none';
+             };
+             contentContainer.appendChild(personalityIcon);
+           }
+         }
+       }
+       
+       // Add chat title
+       const titleSpan = document.createElement('span');
+       titleSpan.className = 'truncate flex-1';
+       titleSpan.textContent = chatData.title || `Chat ${chatData.id}`;
+       contentContainer.appendChild(titleSpan);
+       
+       chatItem.appendChild(contentContainer);
        chatItem.addEventListener('click', () => loadChat(chatData.id));
 
        // Prepend to the top of the list
@@ -261,8 +457,9 @@ document.addEventListener('DOMContentLoaded', () => {
        if (placeholder) chatListDiv.removeChild(placeholder);
 
        chatListDiv.insertBefore(chatItem, firstChild);
-       // Optionally, call updateChatListSelection() if you want the new item highlighted immediately
-       // updateChatListSelection(); // Might need adjustment if currentChatId isn't set yet
+       
+       // Update the chat list selection to highlight the new chat
+       updateChatListSelection();
    }
 
    // Expose the function globally so app.js can call it
