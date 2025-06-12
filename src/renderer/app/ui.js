@@ -34,16 +34,18 @@ export function initializeWindowControls() {
   window.electronAPI.onMessage('window-maximized-status', (isMaximized) => {
     const maxBtn = dom.getMaximizeBtn();
     if (maxBtn) {
-      const icon = maxBtn.querySelector('i');
+      const icon = maxBtn.querySelector('.window-control-icon');
       if (icon) {
         if (isMaximized) {
-          icon.classList.remove('fa-window-maximize');
-          icon.classList.add('fa-window-restore');
+          icon.classList.remove('fa-expand-alt');
+          icon.classList.add('fa-compress-alt');
           maxBtn.setAttribute('aria-label', 'Restore');
+          maxBtn.setAttribute('title', 'Restore');
         } else {
-          icon.classList.remove('fa-window-restore');
-          icon.classList.add('fa-window-maximize');
+          icon.classList.remove('fa-compress-alt');
+          icon.classList.add('fa-expand-alt');
           maxBtn.setAttribute('aria-label', 'Maximize');
+          maxBtn.setAttribute('title', 'Maximize');
         }
       }
     }

@@ -37,18 +37,34 @@ function createWindow() {
   // Send initial maximized state
   mainWindow.webContents.on('did-finish-load', () => {
     if (mainWindow) { // Ensure mainWindow still exists
-      mainWindow.webContents.send('window-maximized-status', mainWindow.isMaximized());
+      // On macOS, check full-screen status; on other platforms, check maximized status
+      const isMaximizedOrFullScreen = process.platform === 'darwin' 
+        ? mainWindow.isFullScreen() 
+        : mainWindow.isMaximized();
+      mainWindow.webContents.send('window-maximized-status', isMaximizedOrFullScreen);
     }
   });
 
-  // Listen for maximize and unmaximize events to update renderer
+  // Listen for maximize and unmaximize events to update renderer (Windows/Linux)
   mainWindow.on('maximize', () => {
-    if (mainWindow) { // Ensure mainWindow still exists
+    if (mainWindow && process.platform !== 'darwin') { // Only for non-macOS
       mainWindow.webContents.send('window-maximized-status', true);
     }
   });
   mainWindow.on('unmaximize', () => {
-    if (mainWindow) { // Ensure mainWindow still exists
+    if (mainWindow && process.platform !== 'darwin') { // Only for non-macOS
+      mainWindow.webContents.send('window-maximized-status', false);
+    }
+  });
+
+  // Listen for full-screen events (macOS)
+  mainWindow.on('enter-full-screen', () => {
+    if (mainWindow) {
+      mainWindow.webContents.send('window-maximized-status', true);
+    }
+  });
+  mainWindow.on('leave-full-screen', () => {
+    if (mainWindow) {
       mainWindow.webContents.send('window-maximized-status', false);
     }
   });
@@ -584,6 +600,102 @@ ipcMain.on('show-native-notification', (event, data) => {
     mainWindow.webContents.send('show-in-app-notification-fallback', { title, body, chatId });
   }
 });
+
+// --- IPC for Timer System ---
+ipcMain.on('timer-created', (event, data) => {
+  console.log('[Main] Timer created notification received:', data);
+  // Could potentially trigger additional main process timer handling if needed
+});
+
+// --- IPC for Enhanced Notification System ---
+ipcMain.on('show-enhanced-notification', (event, data) => {
+  const { title, body, chatId, type, requireInteraction, sound } = data;
+  console.log('[Main] Enhanced notification requested:', { title, type, sound });
+  
+  if (!mainWindow) {
+    console.error("[Main] Cannot show enhanced notification, mainWindow is not available.");
+    return;
+  }
+  
+  if (Notification.isSupported()) {
+    const notification = new Notification({ 
+      title, 
+      body,
+      requireInteraction: requireInteraction || false,
+      sound: sound ? 'Submarine' : undefined // Use macOS system sound
+    });
+    
+    notification.on('click', () => {
+      console.log(`[Main] Enhanced notification clicked for chat ID: ${chatId}`);
+      mainWindow.webContents.send('native-notification-clicked', chatId);
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    });
+    
+    notification.show();
+    
+    // Additional handling for critical notifications
+    if (type === 'timer' || type === 'alarm') {
+      // Set app badge on macOS
+      if (process.platform === 'darwin' && app.dock) {
+        app.dock.setBadge('!');
+        
+        // Clear badge after 30 seconds
+        setTimeout(() => {
+          if (app.dock) app.dock.setBadge('');
+        }, 30000);
+      }
+    }
+  } else {
+    console.warn("[Main] Native notifications not supported on this system.");
+    mainWindow.webContents.send('show-in-app-notification-fallback', { title, body, chatId });
+  }
+});
+
+// --- macOS Dock and Attention Management ---
+ipcMain.on('request-attention', (event, data) => {
+  const { type } = data;
+  console.log('[Main] Attention request received:', { type });
+  
+  if (!mainWindow) {
+    console.error("[Main] Cannot request attention, mainWindow is not available.");
+    return;
+  }
+  
+  // Handle platform-specific attention requests
+  if (process.platform === 'darwin') {
+    // macOS dock bouncing
+    if (app.dock) {
+      if (type === 'critical') {
+        app.dock.bounce('critical'); // Bounces until user clicks on app
+      } else {
+        app.dock.bounce('informational'); // Bounces once
+      }
+    }
+  } else if (process.platform === 'win32') {
+    // Windows taskbar flashing
+    mainWindow.flashFrame(true);
+  } else {
+    // Linux - show window and focus
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
+
+// --- Clear attention when window gains focus ---
+if (mainWindow) {
+  mainWindow.on('focus', () => {
+    if (process.platform === 'darwin') {
+      try {
+        const { app } = require('electron');
+        app.dock.setBadge('');
+      } catch (error) {
+        console.warn('[Main] Could not clear dock badge:', error);
+      }
+    }
+  });
+}
 
 ipcMain.on('open-external-url', (event, url) => {
   console.log(`[Main] Opening external URL: ${url}`);

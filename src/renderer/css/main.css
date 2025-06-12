@@ -8,6 +8,210 @@ body {
   /* Smooth transitions for theme changes */
   transition: background-color 0.3s ease, color 0.3s ease;
 }
+
+/* ======================================== */
+/* Chat Timer & Alarm Widgets              */
+/* ======================================== */
+
+.chat-timer-widget,
+.chat-alarm-widget {
+  @apply w-full mb-3 animate-slideInDown;
+  /* Remove any absolute positioning */
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  z-index: auto !important;
+}
+
+.timer-widget-inner,
+.alarm-widget-inner {
+  @apply flex items-center p-3 rounded-lg border shadow-sm transition-all duration-300;
+  background: var(--content-bg-color);
+  color: var(--foreground-color);
+  /* Ensure proper display */
+  display: flex !important;
+  position: relative !important;
+}
+
+.timer-widget-inner {
+  border-color: var(--primary-color);
+  background: linear-gradient(135deg, var(--content-bg-color), var(--background-color));
+  border-width: 2px;
+}
+
+.alarm-widget-inner {
+  border-color: var(--accent-color);
+  background: linear-gradient(135deg, var(--content-bg-color), var(--background-color));
+  border-width: 2px;
+}
+
+.timer-widget-inner.timer-active {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+}
+
+.timer-widget-inner.timer-finished {
+  border-color: #10b981;
+  background: linear-gradient(135deg, var(--content-bg-color), rgba(16, 185, 129, 0.1));
+}
+
+.theme-dark .timer-widget-inner.timer-finished {
+  background: linear-gradient(135deg, var(--content-bg-color), #064e3b);
+}
+
+.alarm-widget-inner.alarm-pending {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+}
+
+.alarm-widget-inner.alarm-triggered {
+  border-color: #ef4444;
+  background: linear-gradient(135deg, var(--content-bg-color), rgba(239, 68, 68, 0.1));
+  animation: pulse 2s infinite;
+}
+
+.theme-dark .alarm-widget-inner.alarm-triggered {
+  background: linear-gradient(135deg, var(--content-bg-color), #7f1d1d);
+}
+
+.timer-icon,
+.alarm-icon {
+  @apply flex-shrink-0 mr-3;
+  color: var(--primary-color);
+}
+
+.timer-content,
+.alarm-content {
+  @apply flex-1 min-w-0;
+}
+
+.timer-label,
+.alarm-label {
+  @apply font-semibold text-sm;
+  color: var(--foreground-color);
+}
+
+.timer-display,
+.alarm-display {
+  @apply text-lg font-bold tabular-nums;
+  color: var(--primary-color);
+}
+
+.theme-dark .timer-display,
+.theme-dark .alarm-display {
+  color: var(--accent-color);
+  background: rgba(45, 212, 191, 0.1);
+}
+
+.timer-duration {
+  @apply text-xs opacity-75;
+  color: var(--foreground-color);
+}
+
+.timer-actions,
+.alarm-actions {
+  @apply flex-shrink-0 ml-3;
+}
+
+.timer-dismiss-btn,
+.alarm-dismiss-btn {
+  @apply p-1 rounded-full hover:bg-gray-200/50 dark:hover:bg-gray-700/50 transition-colors;
+  color: var(--foreground-color);
+  opacity: 0.6;
+}
+
+.timer-dismiss-btn:hover,
+.alarm-dismiss-btn:hover {
+  opacity: 1;
+}
+
+.timer-separator {
+  @apply my-2 border-b opacity-30;
+  border-color: var(--border-color-soft);
+  /* Ensure it's visible and not positioned */
+  display: block !important;
+  position: relative !important;
+}
+
+.theme-dark .timer-separator {
+  @apply via-gray-600;
+}
+
+/* Timer Pulse Animation for Active State */
+.timer-widget-inner.timer-active .timer-display {
+  animation: timerPulse 2s ease-in-out infinite;
+}
+
+@keyframes timerPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); opacity: 0.8; }
+}
+
+/* Slide Animations */
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideOutUp {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
+/* Pulse Animation for Triggered Alarms */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+/* Timer Completion Animation */
+.timer-widget-inner.timer-finished {
+  animation: completion 0.6s ease-out;
+}
+
+@keyframes completion {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* Responsive Design for Timer Widgets */
+@media (max-width: 640px) {
+  .chat-timer-widget,
+  .chat-alarm-widget {
+    @apply max-w-full;
+  }
+  
+  .timer-widget-inner,
+  .alarm-widget-inner {
+    @apply p-2;
+  }
+  
+  .timer-display,
+  .alarm-display {
+    @apply text-base;
+  }
+  
+  .timer-icon,
+  .alarm-icon {
+    @apply w-6 h-6 mr-2;
+  }
+}
+
 /* Custom Select Dropdown Styles */
 .custom-select-button {
   @apply relative cursor-pointer transition-colors duration-150;
@@ -44,6 +248,7 @@ body {
 .custom-select-option.selected {
     font-weight: 500; /* Make selected slightly bolder */
 }
+
 /* Reusable Component Classes */
 @layer components {
   .btn {

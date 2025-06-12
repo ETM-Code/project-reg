@@ -28,19 +28,24 @@ export function createBubble(sender, text, messageId = null, chatId = null, pers
 
   // --- Strip Metadata ---
   // Enhanced regex to match various metadata formats and handle edge cases
-  const metadataRegex = /^(Date: \d{1,2}\/\d{1,2}\/\d{4} \| Time: \d{1,2}:\d{2}:\d{2} \| Since last msg: \d+s\n)|(\(System: [^\)]+\)\n)/;
+  // Updated to handle AM/PM format and more flexible date/time patterns
+  const metadataRegex = /^(Date: \d{1,2}\/\d{1,2}\/\d{2,4} \| Time: \d{1,2}:\d{2}:\d{2}(\s*(AM|PM))? \| Since last msg: \d+s\n?)|(\(System: [^\)]+\)\n?)/;
   let cleanText = text.replace(metadataRegex, '');
   
-  // Remove any additional leading/trailing whitespace that might cause blank lines
-  cleanText = cleanText.trim();
+  // Remove any additional metadata lines that might have different formats
+  // Handle multiple consecutive metadata/system lines
+  const additionalMetadataRegex = /^(Date: [^\n]+\n)|(\(System: [^\)]+\)\n?)/gm;
+  cleanText = cleanText.replace(additionalMetadataRegex, '');
   
-  // Handle cases where there might be multiple system messages or metadata lines
-  // Remove any remaining lines that look like system messages
-  const systemMessageRegex = /^\(System: [^\)]+\)\n/gm;
+  // Remove any leading empty lines and whitespace that might cause blank padding
+  cleanText = cleanText.replace(/^\s*\n+/, '').trim();
+  
+  // Remove any remaining system messages that might be scattered throughout
+  const systemMessageRegex = /^\(System: [^\)]+\)\n?/gm;
   cleanText = cleanText.replace(systemMessageRegex, '');
   
-  // Final trim to ensure no leading/trailing whitespace
-  cleanText = cleanText.trim();
+  // Final cleanup: remove leading/trailing whitespace and empty lines
+  cleanText = cleanText.replace(/^\s+|\s+$/g, '').replace(/^\n+|\n+$/g, '');
   // --- End Strip Metadata ---
 
   // Use marked.parse if available globally or import/require it
@@ -139,6 +144,13 @@ export function createBubble(sender, text, messageId = null, chatId = null, pers
 
    container.appendChild(bubble); // Append bubble (which now contains button if applicable)
    
+   // Check if this is a timer/alarm creation message and inject widgets
+   if ((sender === 'bot' || sender === 'model') && chatId) {
+     setTimeout(() => {
+       injectTimerWidgetsIntoMessage(container, cleanText, chatId);
+     }, 100); // Small delay to ensure timer data is processed
+   }
+   
    // Render LaTeX with MathJax if available
    if (window.MathJax && window.MathJax.typesetPromise) {
      window.MathJax.typesetPromise([bubble]).catch((err) => {
@@ -158,4 +170,81 @@ export function escapeHtml(unsafe) {
        .replace(/>/g, ">")
        .replace(/"/g, "&quot;")
        .replace(/'/g, "&#039;");
+}
+
+// Function to inject timer widgets into messages
+function injectTimerWidgetsIntoMessage(messageContainer, messageText, chatId) {
+  // Check if this message indicates a timer was created - updated patterns
+  const isTimerMessage = messageText.includes('Timer Started Successfully') || 
+                         messageText.includes('Timer Details') ||
+                         messageText.includes('timer is set') ||
+                         messageText.includes('perfect brew is ready') ||
+                         messageText.includes('Kitchen timer activated') ||
+                         messageText.includes('Break time timer set') ||
+                         messageText.includes('Meeting reminder set') ||
+                         messageText.includes('Workout timer ready') ||
+                         messageText.includes('Study session timer set') ||
+                         messageText.includes('Meditation timer started') ||
+                         messageText.includes('Pomodoro timer activated') ||
+                         messageText.includes('timer activated');
+  
+  const isAlarmMessage = messageText.includes('Alarm set') || 
+                        messageText.includes('Alarm Details') ||
+                        messageText.includes('alarm is set');
+
+  if (!isTimerMessage && !isAlarmMessage) return;
+
+  console.log('[Bubble] Timer/alarm message detected, injecting widgets...');
+
+  // Get active timers and alarms from state
+  if (window.state && (window.state.activeTimers || window.state.activeAlarms)) {
+    const activeItems = [
+      ...(window.state.activeTimers || []),
+      ...(window.state.activeAlarms || [])
+    ];
+
+    // Find recently created items for this chat (within last 10 seconds)
+    const recentItems = activeItems.filter(item => 
+      item.chatId === chatId && 
+      (Date.now() - new Date(item.createdAt).getTime()) < 10000
+    );
+
+    console.log(`[Bubble] Found ${recentItems.length} recent timer/alarm items for chat ${chatId}`);
+
+    if (recentItems.length > 0) {
+      const bubble = messageContainer.querySelector('.w-fit');
+      if (bubble && !bubble.querySelector('.chat-timer-widget, .chat-alarm-widget')) {
+        // Import the timer widget creation functions
+        import('./timers.js').then(module => {
+          recentItems.forEach(item => {
+            let widget;
+            if (item.duration) {
+              // It's a timer
+              widget = module.createChatTimerWidget(item);
+              console.log('[Bubble] Created timer widget for:', item.id);
+            } else {
+              // It's an alarm
+              widget = module.createChatAlarmWidget(item);
+              console.log('[Bubble] Created alarm widget for:', item.id);
+            }
+            
+            if (widget) {
+              // Insert widget at the beginning of the bubble
+              const firstChild = bubble.firstChild;
+              bubble.insertBefore(widget, firstChild);
+              
+              // Add separator
+              const separator = document.createElement('div');
+              separator.className = 'timer-separator my-2 border-b border-gray-200/30';
+              bubble.insertBefore(separator, firstChild);
+              
+              console.log('[Bubble] Inserted widget into bubble successfully');
+            }
+          });
+        }).catch(err => {
+          console.warn('Could not load timer widgets:', err);
+        });
+      }
+    }
+  }
 }

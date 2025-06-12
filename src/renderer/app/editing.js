@@ -1,7 +1,7 @@
 // src/renderer/app/editing.js
 import { state } from './state.js';
 import * as dom from './dom.js';
-import { escapeHtml } from './message.js';
+import { escapeHtml } from './bubble.js';
 import { setStreamingState } from './streaming.js';
 import { createInlineLoadingBubble } from './ui.js';
 

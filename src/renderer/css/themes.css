@@ -161,42 +161,122 @@ body.theme-light {
 ::-webkit-scrollbar-corner {
   background: transparent; /* Hide bottom-right corner */
 }
-/* Window Controls Styling */
-.window-control-btn {
-  -webkit-app-region: no-drag; /* Ensure buttons are clickable */
-  padding: 0.5rem; /* Adjust padding as needed */
-  border-radius: 0.25rem; /* Rounded corners */
-  transition: background-color 0.2s ease-in-out;
-  color: var(--header-text-color); /* Use header text color */
-  background-color: transparent; /* Transparent background by default */
-  border: none; /* No border by default */
-  font-size: 0.875rem; /* Adjust icon size if needed */
-  line-height: 1; /* Ensure icon is centered */
+
+/* Native-style Window Controls */
+.window-controls-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  -webkit-app-region: no-drag;
 }
 
-.window-control-btn:hover {
-  background-color: rgba(255, 255, 255, 0.2); /* Lighten on hover, adjust as needed */
+.window-control {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 0; /* Hide any text content */
 }
 
-.window-control-btn-close:hover {
-  background-color: #e81123; /* Standard red for close button hover */
-  color: white; /* Ensure icon is visible on red background */
+.window-control-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
 }
 
-.window-control-btn i {
-  display: block; /* Helps with centering if needed */
+.window-control-icon {
+  font-size: 6px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  color: rgba(0, 0, 0, 0.7);
+  line-height: 1;
 }
 
-/* Specific styling for dark theme window controls if needed */
-body.theme-dark .window-control-btn {
-  color: var(--header-text-color); /* Ensure contrast in dark mode */
+/* Default macOS traffic light colors */
+.window-control-close {
+  background-color: #ff5f57;
+  border: 1px solid #e0443e;
 }
 
-body.theme-dark .window-control-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1); /* Slightly different hover for dark mode */
+.window-control-minimize {
+  background-color: #ffbd2e;
+  border: 1px solid #dea123;
 }
 
-body.theme-dark .window-control-btn-close:hover {
-  background-color: #e81123;
-  color: white;
+.window-control-maximize {
+  background-color: #28ca42;
+  border: 1px solid #1aad34;
+}
+
+/* Hover effects */
+.window-controls-container:hover .window-control-icon {
+  opacity: 1;
+}
+
+.window-control:hover {
+  transform: scale(1.1);
+}
+
+.window-control-close:hover {
+  background-color: #ff4542;
+}
+
+.window-control-minimize:hover {
+  background-color: #ffb524;
+}
+
+.window-control-maximize:hover {
+  background-color: #25c23d;
+}
+
+/* Active (pressed) states */
+.window-control:active {
+  transform: scale(0.95);
+}
+
+.window-control-close:active {
+  background-color: #bf4943;
+  border-color: #ac4142;
+}
+
+.window-control-minimize:active {
+  background-color: #d4a122;
+  border-color: #b5851d;
+}
+
+.window-control-maximize:active {
+  background-color: #1f9a33;
+  border-color: #177d28;
+}
+
+/* Dark theme adjustments */
+body.theme-dark .window-control {
+  filter: brightness(0.9);
+}
+
+body.theme-dark .window-control-icon {
+  color: rgba(0, 0, 0, 0.8);
+}
+
+/* Light theme adjustments */
+body.theme-light .window-control {
+  filter: brightness(1.1);
+}
+
+/* Focus states for accessibility */
+.window-control:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.3);
+  outline-offset: 2px;
 }

@@ -745,12 +745,25 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
                 mainWindow.minimize();
                 break;
             case 'maximize':
-                if (mainWindow.isMaximized()) {
-                    mainWindow.unmaximize();
+                // On macOS, use full-screen mode like the native green button
+                if (process.platform === 'darwin') {
+                    const isFullScreen = mainWindow.isFullScreen();
+                    mainWindow.setFullScreen(!isFullScreen);
+                    // Send the status immediately since full screen events might not trigger the listeners
+                    setTimeout(() => {
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            mainWindow.webContents.send('window-maximized-status', !isFullScreen);
+                        }
+                    }, 100);
                 } else {
-                    mainWindow.maximize();
+                    // On Windows/Linux, use traditional maximize
+                    if (mainWindow.isMaximized()) {
+                        mainWindow.unmaximize();
+                    } else {
+                        mainWindow.maximize();
+                    }
+                    // Sending status back is handled by main.js 'maximize'/'unmaximize' events
                 }
-                // Sending status back is handled by main.js 'maximize'/'unmaximize' events
                 break;
             case 'close':
                 mainWindow.close();
@@ -1154,6 +1167,92 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
         } catch (error) {
             console.error(`[IPC] Error deleting context file ${contextFileId}:`, error);
             return { success: false, error: error.message };
+        }
+    });
+
+    // --- Timer System IPC Handlers ---
+    ipcMain.on('timer-created', (event, data) => {
+        console.log('[IPC] Timer created notification received:', data);
+        // Could potentially trigger additional main process timer handling if needed
+    });
+
+    ipcMain.on('show-enhanced-notification', (event, data) => {
+        const { title, body, chatId, type, requireInteraction, sound } = data;
+        console.log('[IPC] Enhanced notification requested:', { title, type, sound });
+        
+        if (!mainWindow) {
+            console.error("[IPC] Cannot show enhanced notification, mainWindow is not available.");
+            return;
+        }
+        
+        const { Notification } = require('electron');
+        
+        if (Notification.isSupported()) {
+            const notification = new Notification({ 
+                title, 
+                body,
+                requireInteraction: requireInteraction || false,
+                sound: sound ? 'Submarine' : undefined // Use macOS system sound
+            });
+            
+            notification.on('click', () => {
+                console.log(`[IPC] Enhanced notification clicked for chat ID: ${chatId}`);
+                mainWindow.webContents.send('native-notification-clicked', chatId);
+                if (mainWindow.isMinimized()) mainWindow.restore();
+                mainWindow.focus();
+            });
+            
+            notification.show();
+            
+            // Additional handling for critical notifications
+            if (type === 'timer' || type === 'alarm') {
+                // Set app badge on macOS
+                if (process.platform === 'darwin') {
+                    const { app } = require('electron');
+                    if (app.dock) {
+                        app.dock.setBadge('!');
+                        
+                        // Clear badge after 30 seconds
+                        setTimeout(() => {
+                            if (app.dock) app.dock.setBadge('');
+                        }, 30000);
+                    }
+                }
+            }
+        } else {
+            console.warn("[IPC] Native notifications not supported on this system.");
+            mainWindow.webContents.send('show-in-app-notification-fallback', { title, body, chatId });
+        }
+    });
+
+    ipcMain.on('request-attention', (event, data) => {
+        const { type } = data;
+        console.log('[IPC] Attention request received:', { type });
+        
+        if (!mainWindow) {
+            console.error("[IPC] Cannot request attention, mainWindow is not available.");
+            return;
+        }
+        
+        // Handle platform-specific attention requests
+        if (process.platform === 'darwin') {
+            // macOS dock bouncing
+            const { app } = require('electron');
+            if (app.dock) {
+                if (type === 'critical') {
+                    app.dock.bounce('critical'); // Bounces until user clicks on app
+                } else {
+                    app.dock.bounce('informational'); // Bounces once
+                }
+            }
+        } else if (process.platform === 'win32') {
+            // Windows taskbar flashing
+            mainWindow.flashFrame(true);
+        } else {
+            // Linux - show window and focus
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
         }
     });
 

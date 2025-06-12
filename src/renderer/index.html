@@ -6,6 +6,7 @@
   <title>Project Reg</title>
   <link href="css/output.css" rel="stylesheet">
   <link href="css/themes.css" rel="stylesheet">
+  <link href="css/main.css" rel="stylesheet">
   <link href="css/animations.css" rel="stylesheet">
   <!-- Personality Selector CSS -->
   <link href="components/personalitySelector.css" rel="stylesheet">
@@ -177,17 +178,24 @@
       </div>
       <div class="flex items-center space-x-4">
         <!-- Window Controls -->
-        <div class="flex items-center space-x-2" style="-webkit-app-region: no-drag;">
-          <button id="minimizeBtn" class="btn-header-icon window-control-btn" aria-label="Minimize">
-            <i class="fas fa-window-minimize"></i>
-          </button>
-          <button id="maximizeBtn" class="btn-header-icon window-control-btn" aria-label="Maximize">
-            <i class="fas fa-window-maximize"></i>
-            <!-- Icon will be toggled to fa-window-restore by JS -->
-          </button>
-          <button id="closeBtn" class="btn-header-icon window-control-btn window-control-btn-close" aria-label="Close">
-            <i class="fas fa-times"></i>
-          </button>
+        <div class="flex items-center space-x-3" style="-webkit-app-region: no-drag;">
+          <div class="window-controls-container">
+            <button id="closeBtn" class="window-control window-control-close" aria-label="Close" title="Close">
+              <div class="window-control-inner">
+                <i class="fas fa-times window-control-icon"></i>
+              </div>
+            </button>
+            <button id="minimizeBtn" class="window-control window-control-minimize" aria-label="Minimize" title="Minimize">
+              <div class="window-control-inner">
+                <i class="fas fa-minus window-control-icon"></i>
+              </div>
+            </button>
+            <button id="maximizeBtn" class="window-control window-control-maximize" aria-label="Maximize" title="Maximize">
+              <div class="window-control-inner">
+                <i class="fas fa-expand-alt window-control-icon"></i>
+              </div>
+            </button>
+          </div>
         </div>
         <!-- Token Counter Display -->
         <div id="tokenCounterDisplay" class="text-sm opacity-90" style="-webkit-app-region: no-drag;">
@@ -312,7 +320,7 @@
 
   <!-- Main App Script (Load Last) -->
   <script type="module" src="app.js"></script> <!-- Load as module -->
-  <script src="chatHistory.js"></script> <!-- Assuming this doesn't need module context -->
+  <script type="module" src="chatHistory.js"></script>
 
   <!-- Add class for custom scrollbars -->
   <style>

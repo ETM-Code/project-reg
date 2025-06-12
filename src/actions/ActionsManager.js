@@ -1,21 +1,15 @@
 // ActionsManager.js - Central manager for registering and executing actions
-const CreateEvent = require('./CreateEvent');
-const CheckEvents = require('./CheckEvents');
 const StartTimer = require('./StartTimer');
 const MakeNote = require('./MakeNote');
-const CreateNotification = require('./CreateNotification');
-const CreateAlarm = require('./CreateAlarm');
+
+
 
 // Store action classes to access static methods (like getSchema) and to instantiate
 const actionClasses = {
   // Class keys here should ideally match the names used in personality config's `tools` array
   // e.g., "createNotification", "createAlarm", "startTimer"
-  CreateEvent, // Assuming "CreateEvent" or "createEvent" might be in personality
-  CheckEvents, // Assuming "CheckEvents" or "checkEvents"
-  StartTimer,  // Assuming "StartTimer" or "startTimer"
   MakeNote,    // Assuming "MakeNote" or "makeNote"
-  CreateNotification, // Assuming "CreateNotification" or "createNotification"
-  CreateAlarm       // Assuming "CreateAlarm" or "createAlarm"
+  StartTimer      // Assuming "StartTimer" or "startTimer"
 };
 
 class ActionsManager {

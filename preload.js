@@ -9,7 +9,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
           'edit-message',
           'stop-stream', // Added for stopping streams
           'show-native-notification', // Added for sending notification requests
-          'window-control' // Added for window controls
+          'window-control', // Added for window controls
+          'timer-created', // Added for timer creation notifications
+          'show-enhanced-notification', // Added for enhanced notifications
+          'request-attention' // Added for macOS dock bouncing
       ];
       if (allowedSendChannels.includes(channel)) {
           ipcRenderer.send(channel, data);
@@ -31,7 +34,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
           'token-usage-updated',
           'native-notification-clicked', // Added for notification clicks
           'show-in-app-notification-fallback', // Added for fallback
-          'window-maximized-status' // Added for window controls
+          'window-maximized-status', // Added for window controls
+          'chat-personality-updated',
+          'timer-updated', // Added for timer update notifications
+          'alarm-updated', // Added for alarm update notifications
+          'timer-completed', // Added for timer completion notifications
+          'chat-loaded' // Added for chat loading notifications
       ];
       if (allowedReceiveChannels.includes(channel)) {
           // Ensure the listener function is correctly passed
@@ -132,6 +140,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'token-usage-updated',
       'native-notification-clicked',
       'show-in-app-notification-fallback',
-      'window-maximized-status'
+      'window-maximized-status',
+      'chat-personality-updated',
+      'timer-updated',
+      'alarm-updated',
+      'timer-completed',
+      'chat-loaded'
   ]
 });

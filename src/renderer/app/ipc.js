@@ -1,7 +1,7 @@
 // src/renderer/app/ipc.js
 import { state } from './state.js';
 import { setStreamingState } from './streaming.js';
-import { appendMessage, createBubble } from './message.js';
+import { appendMessage, createBubble } from './bubble.js';
 import { removeInlineLoadingBubble, showInAppAlert } from './ui.js';
 import { loadTimersAndAlarms } from './timers.js';
 
@@ -129,7 +129,21 @@ export function initializeIpcListeners() {
           chatId: currentChatId
         });
       } else if (toolName === 'create_alarm' || toolName === 'start_timer') {
+        // Reload timers to get the latest data
         loadTimersAndAlarms();
+        
+        // Trigger a delayed timer widget injection
+        setTimeout(() => {
+          if (window.renderChatTimers) {
+            window.renderChatTimers();
+          }
+          // Trigger refresh of chat timer display
+          window.electronAPI.sendMessage('timer-created', { 
+            toolName, 
+            result,
+            chatId: chatIdFromMain || (window.getCurrentChatId ? window.getCurrentChatId() : null)
+          });
+        }, 500);
       }
     }
   });
@@ -157,5 +171,67 @@ export function initializeIpcListeners() {
     } else {
       tokenCounterDisplay.textContent = "Today's Tokens: N/A";
     }
+  });
+
+  // Listen for timer updates and refresh display
+  window.electronAPI.onMessage('timer-updated', (data) => {
+    console.log('[IPC] Timer updated:', data);
+    loadTimersAndAlarms();
+  });
+
+  // Listen for alarm updates and refresh display  
+  window.electronAPI.onMessage('alarm-updated', (data) => {
+    console.log('[IPC] Alarm updated:', data);
+    loadTimersAndAlarms();
+  });
+
+  // Listen for timer completion notifications
+  window.electronAPI.onMessage('timer-completed', (data) => {
+    console.log('[IPC] Timer completed:', data);
+    const { timerId, label } = data;
+    
+    // Update the specific timer widget if it exists
+    const timerWidget = document.querySelector(`[data-timer-id="${timerId}"]`);
+    if (timerWidget) {
+      const timerInner = timerWidget.querySelector('.timer-widget-inner');
+      const timerDisplay = timerWidget.querySelector('.timer-display');
+      
+      if (timerInner) {
+        timerInner.className = 'timer-widget-inner timer-finished';
+        timerInner.style.animation = 'completion 0.6s ease-out';
+      }
+      
+      if (timerDisplay) {
+        timerDisplay.textContent = 'Finished!';
+      }
+    }
+    
+    // Show enhanced notification
+    showInAppAlert('timer', 'Timer Completed!', `${label || 'Your timer'} has finished.`);
+  });
+
+  // Listen for alarm trigger notifications
+  window.electronAPI.onMessage('alarm-triggered', (data) => {
+    console.log('[IPC] Alarm triggered:', data);
+    const { alarmId, label } = data;
+    
+    // Update the specific alarm widget if it exists
+    const alarmWidget = document.querySelector(`[data-alarm-id="${alarmId}"]`);
+    if (alarmWidget) {
+      const alarmInner = alarmWidget.querySelector('.alarm-widget-inner');
+      const alarmDisplay = alarmWidget.querySelector('.alarm-display');
+      
+      if (alarmInner) {
+        alarmInner.className = 'alarm-widget-inner alarm-triggered';
+        alarmInner.style.animation = 'pulse 2s infinite';
+      }
+      
+      if (alarmDisplay) {
+        alarmDisplay.textContent = 'Triggered!';
+      }
+    }
+    
+    // Show enhanced notification
+    showInAppAlert('alarm', 'Alarm!', `${label || 'Your alarm'} is ringing.`);
   });
 }

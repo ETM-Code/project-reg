@@ -158,6 +158,11 @@
       "id": "reg-lifecoach-prompt",
       "name": "Reginald Prompt",
       "path": "src/prompt/reg-lifecoach-prompt.md"
+    },
+    {
+      "id": "vanilla-assistant-prompt",
+      "name": "Vanilla Prompt",
+      "path": "src/prompt/vanilla-assistant-prompt.md"
     }
   ],
   "contextSets": [
@@ -193,11 +198,7 @@
       ],
       "tools": [
         "MakeNote",
-        "CreateEvent",
-        "CheckEvents",
-        "startTimer",
-        "createNotification",
-        "createAlarm"
+        "startTimer"
       ],
       "modelId": "gpt-4.1",
       "allowCustomInstructions": true,
@@ -296,11 +297,7 @@
       ],
       "tools": [
         "MakeNote",
-        "CreateEvent",
-        "CheckEvents",
-        "startTimer",
-        "createNotification",
-        "createAlarm"
+        "startTimer"
       ],
       "modelId": "gpt-4o",
       "allowCustomInstructions": true,
@@ -351,13 +348,16 @@
       "name": "Vanilla",
       "icon": "src/renderer/media/reg.png",
       "description": "A friendly, intelligent, and helpful AI assistant.",
-      "promptId": "vanilla-prompt",
+      "promptId": "vanilla-assistant-prompt",
       "availableContextSetIds": [],
       "defaultContextSetIds": [],
-      "tools": [],
+      "tools": [
+        "startTimer"
+      ],
       "modelId": "gpt-4o",
       "allowCustomInstructions": true,
-      "customInstructions": ""
+      "customInstructions": "",
+      "disabled": false
     }
   ]
 }
