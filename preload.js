@@ -93,7 +93,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
           'settings:save-default-font',
           'settings:get-global-setting',
           'settings:save-global-setting',
-          'settings:get-model-details' // Added for fetching full model details
+          'settings:get-model-details', // Added for fetching full model details
+          'get-current-active-state' // Added for getting current active model and personality
       ];
        if (allowedInvokeChannels.includes(channel)) {
            return ipcRenderer.invoke(channel, data);

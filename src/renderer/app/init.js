@@ -22,6 +22,9 @@ export async function initializeApp() {
   await fetchConfig();
   await fetchPersonalities();
 
+  // Sync current active model and personality from backend
+  await syncCurrentActiveState();
+
   // Initialize Token Counter
   try {
     const initialUsage = await window.electronAPI.invoke('get-initial-token-usage');
@@ -58,4 +61,31 @@ export async function initializeApp() {
   }
 
   console.log("[App] Frontend initialized.");
+}
+
+// Function to sync current active model and personality from backend
+async function syncCurrentActiveState() {
+  try {
+    console.log("[App] Syncing current active state from backend...");
+    const activeState = await window.electronAPI.invoke('get-current-active-state');
+    
+    if (activeState && activeState.success) {
+      console.log(`[App] Current active state: ${activeState.personalityName} with ${activeState.modelId}`);
+      
+      // Update personality display
+      if (activeState.personalityName && window.updateActivePersonalityDisplay) {
+        window.updateActivePersonalityDisplay(activeState.personalityName);
+      }
+      
+      // Update model selector
+      if (activeState.modelId && window.updateModelSelectorDisplay) {
+        window.updateModelSelectorDisplay(activeState.modelId);
+        console.log(`[App] Synced model selector to: ${activeState.modelId}`);
+      }
+    } else {
+      console.warn("[App] Failed to get current active state:", activeState?.error || "Unknown error");
+    }
+  } catch (error) {
+    console.error("[App] Error syncing current active state:", error);
+  }
 }

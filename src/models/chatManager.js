@@ -464,8 +464,10 @@ async function startNewChat() {
   const previousChatId = currentChatId;
   const previousHistory = [...conversationHistory]; // Copy of the history of the chat we are leaving
 
-  // Store current session personality before clearing state
+  // Store current session state before clearing state
   const currentSessionPersonalityId = currentPersonalityConfig?.id;
+  const currentSessionModelId = activeModelInstance?.getModelName();
+  const hasTemporaryModelOverride = currentPersonalityConfig?.originalPersonalityId;
 
   // Calculate time since last message of previous chat
   pendingTimeSinceLastChatInfo = null; // Reset before calculation

@@ -17,6 +17,12 @@
   },
   "availableModels": [
     {
+      "id": "gpt-4.1",
+      "name": "GPT-4.1",
+      "implementation": "gpt",
+      "provider": "openai"
+    },
+    {
       "id": "gpt-4o-mini",
       "name": "GPT-4o-Mini",
       "implementation": "gpt",
@@ -25,12 +31,6 @@
     {
       "id": "gpt-4o",
       "name": "GPT-4o",
-      "implementation": "gpt",
-      "provider": "openai"
-    },
-    {
-      "id": "gpt-4.1",
-      "name": "GPT-4.1",
       "implementation": "gpt",
       "provider": "openai"
     },
@@ -308,7 +308,7 @@
       "name": "Default Gemini",
       "icon": "src/renderer/media/gemini.png",
       "description": "Default personality using Gemini.",
-      "promptId": "regLifecoachPrompt",
+      "promptId": "vanilla-assistant-prompt",
       "availableContextSetIds": [
         "my-context",
         "notes-context"
@@ -330,7 +330,7 @@
       "name": "Reasoning Assistant",
       "icon": "src/renderer/media/reasoning.png",
       "description": "Uses OpenAI Reasoning (o4-mini).",
-      "promptId": "regLifecoachPrompt",
+      "promptId": "vanilla-assistant-prompt",
       "availableContextSetIds": [
         "my-context"
       ],

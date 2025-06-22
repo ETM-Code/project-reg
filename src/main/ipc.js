@@ -457,6 +457,30 @@ function setupIpcHandlers(mainWindow) { // Accept mainWindow
         }
     });
 
+    // Handler to get the current active model and personality
+    ipcMain.handle('get-current-active-state', async () => {
+        try {
+            const currentPersonality = chatManager.getCurrentPersonalityConfig();
+            const currentModel = chatManager.getActiveModelInstance();
+            
+            if (currentPersonality && currentModel) {
+                console.log(`[IPC] Returning current active state: personality=${currentPersonality.name}, model=${currentModel.getModelName()}`);
+                return {
+                    success: true,
+                    personalityId: currentPersonality.originalPersonalityId || currentPersonality.id,
+                    personalityName: currentPersonality.name,
+                    modelId: currentModel.getModelName()
+                };
+            } else {
+                console.warn('[IPC] No active personality or model found');
+                return { success: false, error: 'No active personality or model found' };
+            }
+        } catch (error) {
+            console.error('[IPC] Error getting current active state:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
 // Handler to save updated personality settings
     ipcMain.handle('save-personality-settings', async (_, { personalityId, updatedSettings }) => {
         console.log(`[IPC] Received request to save settings for personality: ${personalityId}`, updatedSettings);

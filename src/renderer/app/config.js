@@ -71,4 +71,34 @@ export function populateModelSelector(availableModels, defaultModelId) {
 
   console.log(`[App] Hidden model selector populated. Selected value: ${modelSelector.value}`);
   modelSelector.dispatchEvent(new CustomEvent('optionsUpdated', { bubbles: true }));
+  
+  // Add change handler to sync model selection with backend
+  setupModelSelectorChangeHandler(modelSelector);
+}
+
+function setupModelSelectorChangeHandler(modelSelector) {
+  // Remove any existing change handler to avoid duplicates
+  modelSelector.removeEventListener('change', handleModelSelectorChange);
+  
+  // Add new change handler
+  modelSelector.addEventListener('change', handleModelSelectorChange);
+  console.log("[App] Model selector change handler attached");
+}
+
+async function handleModelSelectorChange(event) {
+  const selectedModelId = event.target.value;
+  if (!selectedModelId) return;
+  
+  try {
+    console.log(`[App] User selected model: ${selectedModelId}, syncing with backend...`);
+    const result = await window.electronAPI.invoke('set-current-chat-model', selectedModelId);
+    
+    if (result && result.success) {
+      console.log(`[App] Successfully synced model to backend: ${selectedModelId}`);
+    } else {
+      console.error(`[App] Failed to sync model with backend:`, result?.error || 'Unknown error');
+    }
+  } catch (error) {
+    console.error(`[App] Error syncing model selection with backend:`, error);
+  }
 }

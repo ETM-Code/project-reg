@@ -135,11 +135,12 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`[ChatHistory] Updated personality display to: ${personalityName}`);
       }
 
-      // Update model selector if we have the data
-      if (modelId && window.updateModelSelectorDisplay) {
-        window.updateModelSelectorDisplay(modelId);
-        console.log(`[ChatHistory] Updated model selector to: ${modelId}`);
-      }
+      // Note: We intentionally do NOT update the model selector when loading chats
+      // The model should remain global and not change based on individual chat history
+      console.log(`[ChatHistory] Chat was saved with model: ${modelId}, but keeping current global model selection`);
+      
+      // TODO: In the future, we might want to show the original model used for this chat
+      // in a read-only indicator without changing the active model selector
 
       console.log(`Successfully loaded chat: ${chatId} (Personality: ${personalityName}, Model: ${modelId})`);
       // Highlight the selected chat in the list (optional)
